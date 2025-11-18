@@ -1,0 +1,257 @@
+<view class="container">
+  <view class="section">
+    <view class="title">PDF转Word - 增强版</view>
+    <view class="desc">支持复杂表格、图片、页码选择等高级功能</view>
+    
+    <!-- 服务版本状态 -->
+    <view wx:if="{{serviceVersion}}" class="version-info {{isOptimizedVersion ? 'optimized' : 'old'}}">
+      <text wx:if="{{isOptimizedVersion}}">⚡ 优化版 v{{serviceVersion}} - 极速转换</text>
+      <text wx:else>⚠️ 旧版 v{{serviceVersion}} - 可能较慢</text>
+    </view>
+    
+    <!-- 文件上传区 -->
+    <view class="upload-area" bindtap="chooseFile">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzJlN2QzMiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持50MB以内的PDF文件</view>
+    </view>
+    
+    <!-- 文件信息 -->
+    <view wx:if="{{fileName}}" class="file-info">
+      <text class="file-name">📄 {{fileName}}</text>
+      <text class="file-size">{{fileSize}}</text>
+      <text wx:if="{{pageCount > 0}}" class="page-count">共 {{pageCount}} 页</text>
+    </view>
+    
+    <!-- PDF预览（分页显示） -->
+    <view wx:if="{{previews.length > 0}}" class="preview-section">
+      <view class="preview-header">
+        <text class="preview-title">📖 PDF预览</text>
+        <view class="preview-actions">
+          <button class="action-btn" size="mini" bindtap="selectAllCurrentPage">全选</button>
+          <button class="action-btn" size="mini" bindtap="clearSelection">清空</button>
+        </view>
+      </view>
+      
+      <view class="previews-grid">
+        <view 
+          wx:for="{{previews}}" 
+          wx:key="page" 
+          class="preview-item {{selectedPreviewPages.indexOf(item.page) > -1 ? 'selected' : ''}}"
+          bindtap="togglePreviewPage"
+          data-page="{{item.page}}"
+        >
+          <image class="preview-img" src="{{item.image}}" mode="aspectFit"></image>
+          <view class="preview-label">第 {{item.page}} 页</view>
+          <view wx:if="{{selectedPreviewPages.indexOf(item.page) > -1}}" class="preview-check">✓</view>
+        </view>
+      </view>
+      
+      <!-- 分页控件 -->
+      <view wx:if="{{previewTotalPages > 1}}" class="pagination">
+        <button 
+          class="page-btn" 
+          size="mini" 
+          bindtap="prevPreviewPage"
+          disabled="{{previewCurrentPage === 1}}"
+        >上一页</button>
+        
+        <view class="page-info">
+          <text>第 {{previewCurrentPage}} / {{previewTotalPages}} 页</text>
+          <text class="page-range">(显示 {{previews[0].page}}-{{previews[previews.length-1].page}} / 共{{pageCount}}页)</text>
+        </view>
+        
+        <button 
+          class="page-btn" 
+          size="mini" 
+          bindtap="nextPreviewPage"
+          disabled="{{previewCurrentPage === previewTotalPages}}"
+        >下一页</button>
+      </view>
+      
+      <view class="selected-info">
+        已选择: {{selectedPreviewPages.length}} 页
+        <text wx:if="{{selectedPreviewPages.length > 0}}" class="selected-pages">
+          ({{selectedPreviewPages.join(', ')}})
+        </text>
+      </view>
+      
+      <button 
+        wx:if="{{selectedPreviewPages.length > 0}}"
+        class="convert-selected-btn"
+        bindtap="convertSelectedPages"
+        disabled="{{converting}}"
+      >
+        转换选中的 {{selectedPreviewPages.length}} 页
+      </button>
+    </view>
+    
+    <!-- 加载预览提示 -->
+    <view wx:if="{{loadingPreview}}" class="loading-preview">
+      <text>⏳ 正在加载预览...</text>
+    </view>
+    
+    <!-- 转换选项 -->
+    <view class="options-section">
+      <view class="section-header" bindtap="toggleOptions">
+        <text class="section-title">⚙️ 转换选项 {{showOptions ? '▼' : '▶'}}</text>
+      </view>
+      
+      <view wx:if="{{showOptions}}" class="options-content">
+        <!-- 转换模式 -->
+        <view class="option-group">
+          <view class="option-label">转换模式</view>
+          
+          <!-- 推荐模式 -->
+          <view 
+            class="mode-btn-premium {{mode === 'premium' ? 'active' : ''}}" 
+            bindtap="onModeChange" 
+            data-mode="premium"
+          >
+            <view class="premium-badge">⭐推荐</view>
+            <view class="mode-icon">💎</view>
+            <view class="mode-name">高质量模式</view>
+            <view class="mode-desc">表格+图片+样式，质量与速度完美平衡</view>
+          </view>
+          
+          <view class="mode-buttons">
+            <view 
+              class="mode-btn {{mode === 'fast' ? 'active' : ''}}" 
+              bindtap="onModeChange" 
+              data-mode="fast"
+            >
+              <view class="mode-icon">⚡</view>
+              <view class="mode-name">快速模式</view>
+              <view class="mode-desc">速度优先</view>
+            </view>
+            
+            <view 
+              class="mode-btn {{mode === 'complex' ? 'active' : ''}}" 
+              bindtap="onModeChange" 
+              data-mode="complex"
+            >
+              <view class="mode-icon">🎨</view>
+              <view class="mode-name">完整格式</view>
+              <view class="mode-desc">传统模式</view>
+            </view>
+            
+            <view 
+              class="mode-btn {{mode === 'simple' ? 'active' : ''}}" 
+              bindtap="onModeChange" 
+              data-mode="simple"
+            >
+              <view class="mode-icon">📝</view>
+              <view class="mode-name">简化格式</view>
+              <view class="mode-desc">无图片</view>
+            </view>
+            
+            <view 
+              class="mode-btn {{mode === 'text-only' ? 'active' : ''}}" 
+              bindtap="onModeChange" 
+              data-mode="text-only"
+            >
+              <view class="mode-icon">📄</view>
+              <view class="mode-name">纯文本</view>
+              <view class="mode-desc">仅文字</view>
+            </view>
+          </view>
+        </view>
+        
+        <!-- 图片选项 -->
+        <view wx:if="{{mode === 'complex'}}" class="option-group">
+          <view class="option-label">图片处理</view>
+          <view class="switch-item" bindtap="onImageToggle">
+            <text>包含图片</text>
+            <switch checked="{{includeImages}}" color="#2e7d32"/>
+          </view>
+        </view>
+        
+        <!-- 页码选择 -->
+        <view class="option-group">
+          <view class="option-label">页码选择</view>
+          
+          <radio-group bindchange="onPageModeChange">
+            <label class="radio-item">
+              <radio value="all" checked="{{pageSelectionMode === 'all'}}"/>
+              <text>全部页面</text>
+            </label>
+            
+            <label class="radio-item">
+              <radio value="range" checked="{{pageSelectionMode === 'range'}}"/>
+              <text>页码范围</text>
+            </label>
+            
+            <label class="radio-item">
+              <radio value="custom" checked="{{pageSelectionMode === 'custom'}}"/>
+              <text>自定义页码</text>
+            </label>
+          </radio-group>
+          
+          <!-- 页码范围输入 -->
+          <view wx:if="{{pageSelectionMode === 'range'}}" class="page-range-input">
+            <view class="input-group">
+              <text class="input-label">起始页:</text>
+              <input 
+                class="page-input" 
+                type="number" 
+                placeholder="1"
+                value="{{pageRangeStart}}"
+                bindinput="onPageRangeStartInput"
+              />
+            </view>
+            <text class="input-separator">-</text>
+            <view class="input-group">
+              <text class="input-label">结束页:</text>
+              <input 
+                class="page-input" 
+                type="number" 
+                placeholder="{{pageCount}}"
+                value="{{pageRangeEnd}}"
+                bindinput="onPageRangeEndInput"
+              />
+            </view>
+          </view>
+          
+          <!-- 自定义页码输入 -->
+          <view wx:if="{{pageSelectionMode === 'custom'}}" class="custom-pages-input">
+            <input 
+              class="custom-input" 
+              type="text" 
+              placeholder="例如: 1,3,5 或 1-5,7,9-12"
+              value="{{customPages}}"
+              bindinput="onCustomPagesInput"
+            />
+            <view class="input-hint">支持单页(1,3,5)、范围(1-5)或混合格式</view>
+          </view>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 转换按钮 -->
+    <button 
+      class="convert-btn {{converting ? 'disabled' : ''}}" 
+      bindtap="convertToWord"
+      disabled="{{converting || !pdfFile}}"
+    >
+      {{converting ? '转换中...' : '开始转换'}}
+    </button>
+    
+    <!-- 转换结果 -->
+    <view wx:if="{{wordUrl}}" class="result">
+      <view class="success-icon">✓</view>
+      <view class="success-text">转换成功！</view>
+      <view class="result-info">
+        <text class="info-label">模式:</text>
+        <text class="info-value">
+          {{mode === 'premium' ? '高质量模式💎' : mode === 'fast' ? '快速模式⚡' : mode === 'complex' ? '完整格式' : mode === 'simple' ? '简化格式' : '纯文本'}}
+        </text>
+      </view>
+      <button class="download-btn" bindtap="downloadWord">下载Word文件</button>
+    </view>
+    
+    <!-- 错误信息 -->
+    <view wx:if="{{error}}" class="error">
+      <text>❌ {{error}}</text>
+    </view>
+  </view>
+</view>

@@ -1,0 +1,17 @@
+<view class="wrap">
+  <view class="panel">
+    <view class="h1">PDF合并</view>
+    <button bindtap="addPdf">添加PDF（可多次）</button>
+    <view class="list" wx:if="{{files.length}}">
+      <block wx:for="{{files}}" wx:key="index">
+        <view class="row">{{item.name}}</view>
+      </block>
+    </view>
+  </view>
+  <view class="footer">
+    <view>已选择 {{files.length}} 个文件</view>
+    <button type="primary" bindtap="startMerge" disabled="{{!files.length}}">开始合并</button>
+  </view>
+</view>
+
+

@@ -1,0 +1,71 @@
+<view class="container">
+  <view class="section">
+    <view class="title">PDF转图片</view>
+    <view class="tips">
+      <view>• 将PDF文件的每一页转换为独立图片</view>
+      <view>• 支持JPG、PNG格式</view>
+    </view>
+    
+    <view class="upload-area" bindtap="choosePdf">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持50MB以内的PDF文件</view>
+    </view>
+    
+    <view wx:if="{{filename}}" class="file-info">
+      <text class="file-name">📄 {{filename}}</text>
+      <text class="file-size" wx:if="{{fileSize}}">{{fileSize}}</text>
+    </view>
+
+    <view class="opts" wx:if="{{tempFilePath}}">
+      <view class="row">
+        <text>输出格式</text>
+        <picker mode="selector" range="{{formats}}" value="{{formatIndex}}" bindchange="onFormatChange">
+          <view class="picker">{{formats[formatIndex]}}</view>
+        </picker>
+      </view>
+      <view class="row">
+        <text>分辨率(DPI)</text>
+        <picker mode="selector" range="{{dpiOptions}}" value="{{dpiIndex}}" bindchange="onDpiChange">
+          <view class="picker">{{dpiOptions[dpiIndex]}}</view>
+        </picker>
+      </view>
+      <view class="row">
+        <text>图片质量</text>
+        <text class="quality">{{quality}}</text>
+      </view>
+      <slider class="slider" min="50" max="100" step="5" value="{{quality}}" bindchange="onQualityChange" activeColor="#3b82f6" />
+    </view>
+    
+    <button 
+      class="convert-btn {{converting ? 'disabled' : ''}}" 
+      bindtap="startConvert"
+      disabled="{{converting || !tempFilePath}}"
+    >
+      {{converting ? '转换中...' : '开始转换'}}
+    </button>
+  </view>
+
+  <!-- 图片展示区 -->
+  <view class="images-panel" wx:if="{{images.length > 0}}">
+    <view class="images-header">
+      <text>PDF共{{totalPdfPages}}页 · 当前第{{currentPage}}/{{totalPages}}页</text>
+    </view>
+
+    <view class="thumbs">
+      <view class="thumb-item" wx:for="{{images}}" wx:key="page">
+        <image class="thumb" mode="aspectFit" src="{{item.image}}" />
+        <view class="thumb-label">第{{item.page}}页</view>
+        <button class="save-btn" size="mini" bindtap="saveImage" data-index="{{index}}">保存</button>
+      </view>
+    </view>
+
+    <view class="pagination" wx:if="{{totalPages > 1}}">
+      <button class="page-btn" size="mini" bindtap="prevPage" disabled="{{currentPage === 1 || loading}}">‹ 上一页</button>
+      <view class="page-info">{{currentPage}} / {{totalPages}}</view>
+      <button class="page-btn" size="mini" bindtap="nextPage" disabled="{{currentPage === totalPages || loading}}">下一页 ›</button>
+    </view>
+
+    <button class="batch-save-btn" bindtap="saveAllImages" wx:if="{{images.length > 0}}">保存当前页全部图片</button>
+  </view>
+</view>

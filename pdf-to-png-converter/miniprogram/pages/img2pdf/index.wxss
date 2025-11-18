@@ -1,0 +1,11 @@
+.wrap { padding: 24rpx; }
+.panel { background: #fff; border-radius: 16rpx; padding: 20rpx; box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05); }
+.h1 { font-size: 32rpx; font-weight: 700; margin-bottom: 12rpx; }
+.tips { background: #f0f6ff; color: #3b82f6; padding: 16rpx; border-radius: 12rpx; font-size: 26rpx; }
+.tips view { margin: 6rpx 0; }
+.uploader { width: 200rpx; height: 200rpx; border: 2rpx dashed #3b82f6; color: #3b82f6; border-radius: 16rpx; display: flex; align-items: center; justify-content: center; margin-top: 20rpx; }
+.thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; margin-top: 16rpx; }
+.thumb { width: 100%; height: 200rpx; border-radius: 12rpx; }
+.footer { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; padding: 20rpx; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -2rpx 12rpx rgba(0,0,0,0.05); }
+
+

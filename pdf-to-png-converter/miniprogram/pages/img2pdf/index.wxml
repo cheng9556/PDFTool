@@ -1,0 +1,27 @@
+<view class="wrap">
+  <view class="panel">
+    <view class="h1">多张图片合并一个PDF文件</view>
+    <view class="tips">
+      <view>• 可选取图片，合成一个PDF文件</view>
+      <view>• 合成页数35页以内，页面总大小70MB以内</view>
+      <view>• 从相册选取图片时一次可选取9张，可多次选择</view>
+    </view>
+
+    <view class="uploader" bindtap="chooseImages">
+      <text>＋</text>
+    </view>
+
+    <view class="thumbs" wx:if="{{images.length}}">
+      <block wx:for="{{images}}" wx:key="index">
+        <image class="thumb" mode="aspectFill" src="{{item}}" />
+      </block>
+    </view>
+  </view>
+
+  <view class="footer">
+    <view>已选择 {{images.length}} 张图片</view>
+    <button type="primary" bindtap="startConvert" disabled="{{!images.length}}">开始转换</button>
+  </view>
+</view>
+
+

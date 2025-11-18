@@ -1,0 +1,8 @@
+.wrap { padding: 24rpx; }
+.panel { background: #fff; border-radius: 16rpx; padding: 20rpx; box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05); }
+.h1 { font-size: 32rpx; font-weight: 700; margin-bottom: 12rpx; }
+.list { margin-top: 12rpx; }
+.row { padding: 8rpx 0; color: #374151; }
+.footer { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; padding: 20rpx; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -2rpx 12rpx rgba(0,0,0,0.05); }
+
+

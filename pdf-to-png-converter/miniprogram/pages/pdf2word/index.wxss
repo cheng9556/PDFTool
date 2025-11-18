@@ -1,0 +1,608 @@
+/* PDF转Word增强版样式 */
+.container {
+  padding: 24rpx;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+}
+
+.section {
+  background: white;
+  border-radius: 16rpx;
+  padding: 32rpx;
+  box-shadow: 0 4rpx 20rpx rgba(0,0,0,0.08);
+}
+
+.title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16rpx;
+  text-align: center;
+}
+
+.desc {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 40rpx;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* 服务版本信息 */
+.version-info {
+  margin-top: 24rpx;
+  margin-bottom: 24rpx;
+  padding: 12rpx 24rpx;
+  border-radius: 8rpx;
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 500;
+  animation: fadeIn 0.5s;
+}
+
+.version-info.optimized {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  color: #2e7d32;
+  border: 2rpx solid #4caf50;
+}
+
+.version-info.old {
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  color: #f57c00;
+  border: 2rpx solid #ff9800;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10rpx);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 上传区 */
+.upload-area {
+  border: 2rpx dashed #d9d9d9;
+  border-radius: 16rpx;
+  padding: 60rpx 40rpx;
+  text-align: center;
+  background: #fafafa;
+  margin-bottom: 32rpx;
+  transition: all 0.3s;
+}
+
+.upload-area:active {
+  background: #f0f0f0;
+  border-color: #2e7d32;
+}
+
+.upload-icon {
+  width: 80rpx;
+  height: 80rpx;
+  margin-bottom: 20rpx;
+}
+
+.upload-text {
+  font-size: 28rpx;
+  color: #2e7d32;
+  margin-bottom: 12rpx;
+  font-weight: 500;
+}
+
+.upload-hint {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 文件信息 */
+.file-info {
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  padding: 24rpx;
+  border-radius: 12rpx;
+  margin-bottom: 16rpx;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.file-name {
+  font-size: 28rpx;
+  color: #333;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  font-size: 24rpx;
+  color: #666;
+  margin-left: 16rpx;
+}
+
+
+/* 选项区 */
+.options-section {
+  margin-bottom: 32rpx;
+  padding: 24rpx;
+  background: #f8f9fa;
+  border-radius: 12rpx;
+}
+
+.section-header {
+  padding: 16rpx 0;
+  border-bottom: 1rpx solid #eee;
+  margin-bottom: 20rpx;
+}
+
+.section-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.options-content {
+  margin-top: 20rpx;
+}
+
+.option-group {
+  margin-bottom: 32rpx;
+}
+
+.option-label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 16rpx;
+}
+
+/* Premium模式按钮 */
+.mode-btn-premium {
+  position: relative;
+  padding: 28rpx 24rpx;
+  background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+  border: 3rpx solid #f9a825;
+  border-radius: 16rpx;
+  text-align: center;
+  margin-bottom: 24rpx;
+  box-shadow: 0 6rpx 20rpx rgba(249, 168, 37, 0.3);
+  transition: all 0.3s;
+}
+
+.mode-btn-premium.active {
+  background: linear-gradient(135deg, #f9a825 0%, #f57f17 100%);
+  box-shadow: 0 8rpx 24rpx rgba(249, 168, 37, 0.5);
+  transform: scale(1.02);
+}
+
+.premium-badge {
+  position: absolute;
+  top: -12rpx;
+  right: 12rpx;
+  background: #ff6f00;
+  color: white;
+  padding: 4rpx 16rpx;
+  border-radius: 12rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+/* 模式选择按钮 */
+.mode-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16rpx;
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 24rpx 16rpx;
+  background: white;
+  border: 2rpx solid #e0e0e0;
+  border-radius: 12rpx;
+  text-align: center;
+  transition: all 0.3s;
+}
+
+.mode-btn.active {
+  background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+  border-color: #2e7d32;
+}
+
+.mode-icon {
+  font-size: 48rpx;
+  margin-bottom: 8rpx;
+}
+
+.mode-name {
+  font-size: 26rpx;
+  font-weight: 600;
+  margin-bottom: 6rpx;
+}
+
+.mode-btn.active .mode-name,
+.mode-btn.active .mode-desc {
+  color: white;
+}
+
+.mode-name {
+  color: #333;
+}
+
+.mode-desc {
+  font-size: 22rpx;
+  color: #999;
+}
+
+/* 开关选项 */
+.switch-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx;
+  background: white;
+  border-radius: 8rpx;
+}
+
+.switch-item text {
+  font-size: 28rpx;
+  color: #333;
+}
+
+/* 单选项 */
+.radio-item {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 20rpx;
+  background: white;
+  border-radius: 8rpx;
+  margin-bottom: 12rpx;
+}
+
+.radio-item text {
+  margin-left: 16rpx;
+  font-size: 28rpx;
+  color: #333;
+}
+
+/* 页码输入 */
+.page-range-input {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16rpx;
+  padding: 20rpx;
+  background: white;
+  border-radius: 8rpx;
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.input-label {
+  font-size: 26rpx;
+  color: #666;
+  margin-right: 12rpx;
+}
+
+.page-input {
+  flex: 1;
+  padding: 12rpx;
+  border: 1rpx solid #ddd;
+  border-radius: 6rpx;
+  font-size: 26rpx;
+  text-align: center;
+}
+
+.input-separator {
+  margin: 0 16rpx;
+  font-size: 28rpx;
+  color: #666;
+}
+
+.custom-pages-input {
+  margin-top: 16rpx;
+  padding: 20rpx;
+  background: white;
+  border-radius: 8rpx;
+}
+
+.custom-input {
+  width: 100%;
+  padding: 16rpx;
+  border: 1rpx solid #ddd;
+  border-radius: 6rpx;
+  font-size: 26rpx;
+}
+
+.input-hint {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #999;
+  line-height: 1.6;
+}
+
+/* 转换按钮 */
+.convert-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%);
+  color: white;
+  border: none;
+  border-radius: 12rpx;
+  padding: 28rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  box-shadow: 0 4rpx 12rpx rgba(46, 125, 50, 0.3);
+  transition: all 0.3s;
+}
+
+.convert-btn:active {
+  transform: scale(0.98);
+  box-shadow: 0 2rpx 8rpx rgba(46, 125, 50, 0.3);
+}
+
+.convert-btn.disabled {
+  background: #ccc;
+  box-shadow: none;
+}
+
+/* 转换结果 */
+.result {
+  margin-top: 40rpx;
+  text-align: center;
+  padding: 40rpx;
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-radius: 16rpx;
+}
+
+.success-icon {
+  font-size: 80rpx;
+  color: #52c41a;
+  margin-bottom: 20rpx;
+}
+
+.success-text {
+  font-size: 32rpx;
+  color: #333;
+  font-weight: 600;
+  margin-bottom: 20rpx;
+}
+
+.result-info {
+  margin-bottom: 32rpx;
+  font-size: 26rpx;
+  color: #666;
+}
+
+.info-label {
+  font-weight: 500;
+  margin-right: 8rpx;
+}
+
+.info-value {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.download-btn {
+  background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%);
+  color: white;
+  border: none;
+  border-radius: 12rpx;
+  padding: 24rpx 48rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  box-shadow: 0 4rpx 12rpx rgba(82, 196, 26, 0.3);
+}
+
+.download-btn:active {
+  transform: scale(0.98);
+}
+
+/* 错误提示 */
+.error {
+  margin-top: 32rpx;
+  padding: 24rpx;
+  background: #fff2f0;
+  border-radius: 12rpx;
+  border-left: 4rpx solid #ff4d4f;
+  color: #ff4d4f;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+/* PDF预览区域 */
+.preview-section {
+  margin-top: 32rpx;
+  padding: 24rpx;
+  background: #f8f9fa;
+  border-radius: 12rpx;
+  border: 2rpx solid #e9ecef;
+}
+
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24rpx;
+}
+
+.preview-title {
+  font-size: 30rpx;
+  color: #333;
+  font-weight: 600;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.action-btn {
+  background: #2e7d32;
+  color: white;
+  border: none;
+  padding: 12rpx 24rpx;
+  font-size: 24rpx;
+}
+
+.action-btn:active {
+  opacity: 0.8;
+}
+
+/* 预览网格 */
+.previews-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);  /* 每行固定5个 */
+  gap: 20rpx;
+  margin-bottom: 24rpx;
+}
+
+.preview-item {
+  position: relative;
+  background: white;
+  border-radius: 12rpx;
+  overflow: hidden;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.1);
+  transition: all 0.3s;
+  border: 3rpx solid transparent;
+}
+
+.preview-item.selected {
+  border-color: #2e7d32;
+  box-shadow: 0 4rpx 16rpx rgba(46, 125, 50, 0.3);
+  transform: translateY(-4rpx);
+}
+
+.preview-img {
+  width: 100%;
+  height: 180rpx;  /* 调整高度以适应5列布局 */
+  background: #f5f5f5;
+}
+
+.preview-label {
+  padding: 10rpx;
+  text-align: center;
+  font-size: 20rpx;  /* 更小的字体以适应5列 */
+  color: #666;
+  background: white;
+}
+
+.preview-check {
+  position: absolute;
+  top: 6rpx;
+  right: 6rpx;
+  width: 36rpx;
+  height: 36rpx;
+  background: #2e7d32;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20rpx;  /* 更小的勾选标记 */
+  font-weight: 600;
+  box-shadow: 0 2rpx 8rpx rgba(46, 125, 50, 0.4);
+}
+
+/* 加载预览 */
+.loading-preview {
+  margin-top: 24rpx;
+  padding: 48rpx;
+  text-align: center;
+  color: #999;
+  font-size: 26rpx;
+  background: #f5f5f5;
+  border-radius: 12rpx;
+}
+
+/* 分页控件 */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 24rpx;
+  padding: 20rpx;
+  background: white;
+  border-radius: 12rpx;
+}
+
+.page-btn {
+  background: #2e7d32;
+  color: white;
+  border: none;
+  padding: 12rpx 32rpx;
+  font-size: 24rpx;
+}
+
+.page-btn[disabled] {
+  background: #e0e0e0;
+  color: #999;
+}
+
+.page-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
+  font-size: 24rpx;
+  color: #333;
+}
+
+.page-range {
+  font-size: 20rpx;
+  color: #999;
+}
+
+/* 选中信息 */
+.selected-info {
+  margin-top: 24rpx;
+  padding: 16rpx 24rpx;
+  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+  border-radius: 12rpx;
+  font-size: 26rpx;
+  color: #2e7d32;
+  text-align: center;
+  font-weight: 500;
+}
+
+.selected-pages {
+  font-size: 22rpx;
+  color: #666;
+  margin-left: 8rpx;
+}
+
+/* 转换选中页按钮 */
+.convert-selected-btn {
+  margin-top: 24rpx;
+  background: linear-gradient(135deg, #4caf50 0%, #2e7d32 100%);
+  color: white;
+  border: none;
+  border-radius: 12rpx;
+  padding: 24rpx 48rpx;
+  font-size: 28rpx;
+  font-weight: 600;
+  box-shadow: 0 4rpx 12rpx rgba(46, 125, 50, 0.3);
+}
+
+.convert-selected-btn:active {
+  transform: scale(0.98);
+}
+
+.convert-selected-btn[disabled] {
+  background: #e0e0e0;
+  color: #999;
+  box-shadow: none;
+}
+
+.page-count {
+  font-size: 24rpx;
+  color: #2e7d32;
+  font-weight: 500;
+}

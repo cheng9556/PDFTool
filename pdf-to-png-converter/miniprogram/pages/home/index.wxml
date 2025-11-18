@@ -1,0 +1,78 @@
+<view class="home">
+  <view class="banner">PDF转换大师-悦智通</view>
+
+  <view class="card">
+    <view class="card-title"><view class="title-icon icon-pdf"></view>PDF转换</view>
+    <view class="menu">
+      <view class="menu-item" bindtap="goImg2Pdf"><view class="icon icon-image"></view><text class="label">图片转PDF</text></view>
+      <view class="menu-item" bindtap="goPdf2Img"><view class="icon icon-pdf"></view><text class="label">PDF转图片</text></view>
+      <view class="menu-item" bindtap="goPdf2Excel"><view class="icon icon-excel"></view><text class="label">PDF转Excel</text></view>
+      <view class="menu-item" bindtap="goPdf2Word"><view class="icon icon-word"></view><text class="label">PDF转Word</text></view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title"><view class="title-icon icon-pdf"></view>PDF转换</view>
+    <view class="menu">
+      <view class="menu-item" bindtap="goWord2Pdf"><view class="icon icon-word"></view><text class="label">Word转PDF</text></view>
+      <view class="menu-item" bindtap="goPptConvert"><view class="icon icon-ppt"></view><text class="label">PPT转换</text></view>
+      <view class="menu-item" bindtap="goExcel2Pdf"><view class="icon icon-excel"></view><text class="label">Excel转PDF</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">文字转PDF</text></view>
+    </view>
+  </view>
+  
+  <view class="card">
+    <view class="card-title"><view class="title-icon icon-pdf"></view>PDF编辑</view>
+    <view class="menu">
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">提取内嵌图片</text></view>
+      <view class="menu-item" bindtap="goSplit"><view class="icon icon-split"></view><text class="label">文件拆分</text></view>
+      <view class="menu-item" bindtap="goMerge"><view class="icon icon-merge"></view><text class="label">PDF合并</text></view>
+      <view class="menu-item" bindtap="goReorder"><view class="icon icon-pages"></view><text class="label">增删页/排序</text></view>
+    </view>
+  </view>
+
+
+
+  <view class="card">
+    <view class="card-title"><view class="title-icon icon-pdf"></view>PDF优化</view>
+    <view class="menu">
+      <view class="menu-item" bindtap="goRotate"><view class="icon icon-rotate"></view><text class="label">旋转页面</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-compress"></view><text class="label">PDF压缩</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">编排页面</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-image"></view><text class="label">转长图</text></view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title"><view class="title-icon icon-pdf"></view>PDF处理</view>
+    <view class="menu">
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">长图打印</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">转黑白</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">修改文件名</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-password"></view><text class="label">添加密码</text></view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title"><view class="title-icon icon-pdf"></view>高级功能</view>
+    <view class="menu">
+      <view class="menu-item" bindtap="todo"><view class="icon icon-split"></view><text class="label">页面分割裁剪</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-merge"></view><text class="label">页面合并</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-watermark"></view><text class="label">去水印</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-password"></view><text class="label">加水印/密码</text></view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title"><view class="title-icon icon-pdf"></view>其他工具</view>
+    <view class="menu">
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">OFD</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">发票合并</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">拼图</text></view>
+      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">视频转长图</text></view>
+    </view>
+  </view>
+
+</view>
+
+

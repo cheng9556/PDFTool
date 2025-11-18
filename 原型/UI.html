@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF转换助手 - 微信小程序完整原型</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        body {
+            background-color: #f8f8f8;
+            color: #333;
+            line-height: 1.5;
+            max-width: 414px;
+            margin: 0 auto;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            position: relative;
+            min-height: 100vh;
+        }
+        
+        .container {
+            padding-bottom: 60px;
+        }
+        
+        /* 头部样式 */
+        .header {
+            background: linear-gradient(135deg, #1a6dff 0%, #0d5cd9 100%);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        /* 功能区域样式 */
+        .section {
+            background: white;
+            margin: 12px;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        }
+        
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+            display: flex;
+            align-items: center;
+        }
+        
+        .section-title i {
+            margin-right: 8px;
+            color: #1a6dff;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+        
+        .grid-item {
+            text-align: center;
+            padding: 10px 5px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        
+        .grid-item:hover {
+            background-color: #f5f8ff;
+        }
+        
+        .grid-item i {
+            font-size: 24px;
+            color: #1a6dff;
+            margin-bottom: 5px;
+            display: block;
+        }
+        
+        .grid-item span {
+            font-size: 12px;
+            color: #555;
+        }
+        
+        /* 底部导航栏 */
+        .tab-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            display: flex;
+            padding: 8px 0;
+            border-top: 1px solid #eee;
+            max-width: 414px;
+            margin: 0 auto;
+            z-index: 100;
+        }
+        
+        .tab-item {
+            flex: 1;
+            text-align: center;
+            padding: 5px 0;
+            color: #888;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .tab-item.active {
+            color: #1a6dff;
+        }
+        
+        .tab-item i {
+            font-size: 20px;
+            margin-bottom: 3px;
+            display: block;
+        }
+        
+        /* 页面样式 */
+        .page {
+            display: none;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        .back-btn {
+            position: absolute;
+            left: 15px;
+            top: 15px;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        
+        .function-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .function-desc {
+            background: #f0f7ff;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .function-desc ul {
+            padding-left: 20px;
+        }
+        
+        .function-desc li {
+            margin-bottom: 8px;
+        }
+        
+        .image-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .image-item {
+            aspect-ratio: 1;
+            background: #f5f5f5;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .image-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .add-btn {
+            background: #e8f0ff;
+            color: #1a6dff;
+            font-size: 24px;
+            border: 1px dashed #1a6dff;
+            cursor: pointer;
+        }
+        
+        .delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .action-bar {
+            position: fixed;
+            bottom: 60px;
+            left: 0;
+            right: 0;
+            background: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid #eee;
+            max-width: 414px;
+            margin: 0 auto;
+            z-index: 99;
+        }
+        
+        .selected-info {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .primary-btn {
+            background: #1a6dff;
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        
+        .secondary-btn {
+            background: #f0f0f0;
+            color: #333;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        
+        /* 文件上传区域 */
+        .upload-area {
+            border: 2px dashed #d9d9d9;
+            border-radius: 10px;
+            padding: 30px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background: #fafafa;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .upload-area:hover {
+            border-color: #1a6dff;
+            background: #f0f7ff;
+        }
+        
+        .upload-area i {
+            font-size: 40px;
+            color: #1a6dff;
+            margin-bottom: 10px;
+            display: block;
+        }
+        
+        .upload-area p {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        /* 设置区域 */
+        .settings-group {
+            margin-bottom: 20px;
+        }
+        
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+        
+        .setting-label {
+            font-size: 14px;
+        }
+        
+        .setting-value {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .slider {
+            background-color: #1a6dff;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+        
+        /* 转换记录 */
+        .record-list {
+            margin-top: 15px;
+        }
+        
+        .record-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .record-item:last-child {
+            border-bottom: none;
+        }
+        
+        .record-icon {
+            width: 40px;
+            height: 40px;
+            background: #e8f0ff;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+        }
+        
+        .record-info {
+            flex: 1;
+        }
+        
+        .record-name {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        
+        .record-detail {
+            font-size: 12px;
+            color: #888;
+        }
+        
+        .record-action {
+            color: #1a6dff;
+            font-size: 14px;
+        }
+        
+        /* 图标样式 */
+        .icon {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+        }
+        
+        .icon-pdf { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z"/></svg>'); }
+        .icon-image { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>'); }
+        .icon-home { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>'); }
+        .icon-scan { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>'); }
+        .icon-history { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>'); }
+        .icon-user { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>'); }
+        .icon-back { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>'); }
+        .icon-add { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'); }
+        .icon-close { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>'); }
+        .icon-upload { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>'); }
+        .icon-word { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M15.2,20H13.8L12,13.2L10.2,20H8.8L6.6,11H8.1L9.5,17.8L11.3,11H12.6L14.4,17.8L15.8,11H17.3L15.2,20M13,9V3.5L18.5,9H13Z"/></svg>'); }
+        .icon-excel { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M15.8,20H14L12,16.6L10,20H8.2L11.1,15.5L8.2,11H10L12,14.4L14,11H15.8L12.9,15.5L15.8,20M13,9V3.5L18.5,9H13Z"/></svg>'); }
+        .icon-ppt { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M15.2,20H13.8V16H10.8V20H9.2V15.5C9.2,14.7 9.9,14 10.7,14H13C13.8,14 14.5,14.7 14.5,15.5V20M13,9H13.8V13H13V9M9.8,9V10.5H11.3V13H12.8V9H9.8Z"/></svg>'); }
+        .icon-compress { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M10,13H8V15H10V13M16,13H12V15H16V13M10,9H8V11H10V9M16,9H12V11H16V9M10,17H8V19H10V17M13,17H12V19H13V17Z"/></svg>'); }
+        .icon-watermark { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M21,3H3A2,2 0 0,0 1,5V19A2,2 0 0,0 3,21H21A2,2 0 0,0 23,19V5A2,2 0 0,0 21,3M21,19H3V5H21V19M12,6C8.69,6 6,8.69 6,12C6,15.31 8.69,18 12,18C15.31,18 18,15.31 18,12C18,8.69 15.31,6 12,6Z"/></svg>'); }
+        .icon-merge { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M17,21L14.25,18L15.41,16.84L17,18.43L20.59,14.84L21.75,16.25M12.8,21H5C3.89,21 3,20.11 3,19V5C3,3.89 3.89,3 5,3H19C20.11,3 21,3.89 21,5V12.8C20.39,12.45 19.72,12.2 19,12.08V5H5V19H12.08C12.2,19.72 12.45,20.39 12.8,21M12,17H7V15H12M14.68,13H7V11H17V12.08C16.15,12.22 15.37,12.54 14.68,13M17,9H7V7H17"/></svg>'); }
+        .icon-split { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M9,13V19H7V13H9M15,15V17H17V19H19V17H17V15H15M17,13V15H15V13H17M19,11V13H17V11H19Z"/></svg>'); }
+        .icon-rotate { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M12,6C8.62,6 5.5,7.12 3,9L3,12L6,12V9H6C7.93,7.94 9.94,7.25 12,7.25C13,7.25 14,7.38 14.88,7.6C15.87,7.85 16.81,8.25 17.63,8.78L16.5,10.42C16,10.05 15.44,9.73 14.84,9.5C14.15,9.24 13.38,9.07 12.57,9.07C10.17,9.07 7.95,10.09 6.39,11.67L8.93,14.21L2,14.25L1.95,7.32L4.44,9.81C6.55,7.66 9.17,6.19 12,6.25V6M21,11L21,8L18,8V11H18C16.07,12.06 14.06,12.75 12,12.75C11,12.75 10,12.62 9.12,12.4C8.13,12.15 7.19,11.75 6.37,11.22L7.5,9.58C8,9.95 8.56,10.27 9.16,10.5C9.85,10.76 10.62,10.93 11.43,10.93C13.83,10.93 16.05,9.91 17.61,8.33L15.07,5.79L22,5.75L22.05,12.68L19.56,10.19C17.45,12.34 14.83,13.81 12,13.75V14C15.38,14 18.5,12.88 21,11Z"/></svg>'); }
+        .icon-password { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M12,17A2,2 0 0,0 14,15C14,13.89 13.1,13 12,13A2,2 0 0,0 10,15A2,2 0 0,0 12,17M18,8A2,2 0 0,1 20,10V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V10C4,8.89 4.9,8 6,8H7V6A5,5 0 0,1 12,1A5,5 0 0,1 17,6V8H18M12,3A3,3 0 0,0 9,6V8H15V6A3,3 0 0,0 12,3Z"/></svg>'); }
+        .icon-pages { background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%231a6dff"><path d="M3,5V21H9V19.5H7V18H9V16.5H5V15H9V13.5H7V12H9V10.5H5V9H9V5H10.5V9H12V7H13.5V9H15V5H16.5V9H18V7H19.5V9H21V5C21,3.89 20.1,3 19,3H5A2,2 0 0,0 3,5M6,7A1,1 0 0,1 5,6A1,1 0 0,1 6,5A1,1 0 0,1 7,6A1,1 0 0,1 6,7Z"/></svg>'); }
+    </style>
+</head>
+<body>
+    <!-- 主页 -->
+    <div id="home-page" class="page active">
+        <div class="header">
+            <h1>PDF转换助手</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-pdf"></i>
+                    PDF转换
+                </div>
+                <div class="grid">
+                    <div class="grid-item" onclick="navigateTo('image-to-pdf-page')">
+                        <i class="icon icon-image"></i>
+                        <span>图片转PDF</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('pdf-to-image-page')">
+                        <i class="icon icon-pdf"></i>
+                        <span>PDF转图片</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('pdf-to-excel-page')">
+                        <i class="icon icon-excel"></i>
+                        <span>PDF转Excel</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('pdf-to-word-page')">
+                        <i class="icon icon-word"></i>
+                        <span>PDF转Word</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-pdf"></i>
+                    PDF转换
+                </div>
+                <div class="grid">
+                    <div class="grid-item" onclick="navigateTo('word-to-pdf-page')">
+                        <i class="icon icon-word"></i>
+                        <span>Word转PDF</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('ppt-convert-page')">
+                        <i class="icon icon-ppt"></i>
+                        <span>PPT转换</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('excel-to-pdf-page')">
+                        <i class="icon icon-excel"></i>
+                        <span>Excel转PDF</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('text-to-pdf-page')">
+                        <i class="icon icon-pdf"></i>
+                        <span>文字转PDF</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-pdf"></i>
+                    PDF编辑
+                </div>
+                <div class="grid">
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>提取内嵌图片</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('split-pdf-page')">
+                        <i class="icon icon-split"></i>
+                        <span>文件拆分</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('merge-pdf-page')">
+                        <i class="icon icon-merge"></i>
+                        <span>PDF合并</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('pages-manage-page')">
+                        <i class="icon icon-pages"></i>
+                        <span>增删页/排序</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-pdf"></i>
+                    PDF优化
+                </div>
+                <div class="grid">
+                    <div class="grid-item" onclick="navigateTo('rotate-page')">
+                        <i class="icon icon-rotate"></i>
+                        <span>旋转页面</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('compress-pdf-page')">
+                        <i class="icon icon-compress"></i>
+                        <span>PDF压缩</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>编排页面</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>转长图</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-pdf"></i>
+                    PDF处理
+                </div>
+                <div class="grid">
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>长图打印</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>转黑白</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>修改文件名</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('add-pages-page')">
+                        <i class="icon icon-pages"></i>
+                        <span>添加页码</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-pdf"></i>
+                    高级功能
+                </div>
+                <div class="grid">
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>页面分割裁剪</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>页面合并</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('remove-watermark-page')">
+                        <i class="icon icon-watermark"></i>
+                        <span>去水印</span>
+                    </div>
+                    <div class="grid-item" onclick="navigateTo('add-watermark-page')">
+                        <i class="icon icon-password"></i>
+                        <span>加水印/密码</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-pdf"></i>
+                    其他工具
+                </div>
+                <div class="grid">
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>OFD</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>发票合并</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>拼图</span>
+                    </div>
+                    <div class="grid-item">
+                        <i class="icon icon-pdf"></i>
+                        <span>视频转长图</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="tab-bar">
+            <div class="tab-item active" onclick="navigateTo('home-page')">
+                <i class="icon icon-home"></i>
+                <span>首页</span>
+            </div>
+            <div class="tab-item" onclick="navigateTo('scan-page')">
+                <i class="icon icon-scan"></i>
+                <span>证件扫描仪</span>
+            </div>
+            <div class="tab-item" onclick="navigateTo('history-page')">
+                <i class="icon icon-history"></i>
+                <span>转换记录</span>
+            </div>
+            <div class="tab-item" onclick="navigateTo('profile-page')">
+                <i class="icon icon-user"></i>
+                <span>我的</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 多图合并PDF页面 -->
+    <div id="image-to-pdf-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>图片转PDF</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="function-title">多张图片合并成一个PDF文件</div>
+                
+                <div class="function-desc">
+                    <ul>
+                        <li>可选取图片，合成一个PDF文件</li>
+                        <li>合成页数30页以内、页面总大小30MB以内</li>
+                        <li>从相册选取图片时一次可选取9张，可多次选择</li>
+                    </ul>
+                </div>
+                
+                <div class="image-grid" id="image-grid">
+                    <div class="image-item add-btn" onclick="addImages()">
+                        <i class="icon icon-add"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-bar">
+            <div class="selected-info" id="selected-info">已选择 0 张图片</div>
+            <button class="primary-btn" onclick="mergeToPDF()">开始转换</button>
+        </div>
+    </div>
+    
+    <!-- PDF转图片页面 -->
+    <div id="pdf-to-image-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>PDF转图片</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="function-title">PDF文件转换为图片</div>
+                
+                <div class="function-desc">
+                    <ul>
+                        <li>支持将PDF文件的每一页转换为独立图片</li>
+                        <li>支持JPG、PNG等多种图片格式</li>
+                        <li>可自定义图片质量和分辨率</li>
+                        <li>转换后的图片自动保存到相册</li>
+                    </ul>
+                </div>
+                
+                <div class="upload-area" onclick="uploadPDF()">
+                    <i class="icon icon-upload"></i>
+                    <p>点击上传PDF文件</p>
+                    <p style="font-size: 12px; margin-top: 5px;">支持30MB以内的PDF文件</p>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="setting-item">
+                        <div class="setting-label">输出格式</div>
+                        <div class="setting-value">JPG</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">图片质量</div>
+                        <div class="setting-value">高</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">每页生成一张图片</div>
+                        <label class="toggle">
+                            <input type="checkbox" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-bar">
+            <div class="selected-info">未选择文件</div>
+            <button class="primary-btn" onclick="convertToImages()">开始转换</button>
+        </div>
+    </div>
+    
+    <!-- PDF转Excel页面 -->
+    <div id="pdf-to-excel-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>PDF转Excel</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="function-title">PDF表格转换为Excel</div>
+                
+                <div class="function-desc">
+                    <ul>
+                        <li>智能识别PDF中的表格数据</li>
+                        <li>保持表格结构和格式</li>
+                        <li>支持批量转换多个PDF文件</li>
+                        <li>转换准确率高达95%以上</li>
+                    </ul>
+                </div>
+                
+                <div class="upload-area" onclick="uploadPDF()">
+                    <i class="icon icon-upload"></i>
+                    <p>点击上传PDF文件</p>
+                    <p style="font-size: 12px; margin-top: 5px;">支持包含表格的PDF文件</p>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="setting-item">
+                        <div class="setting-label">识别模式</div>
+                        <div class="setting-value">智能识别</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">保留表格样式</div>
+                        <label class="toggle">
+                            <input type="checkbox" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-bar">
+            <div class="selected-info">未选择文件</div>
+            <button class="primary-btn" onclick="convertToExcel()">开始转换</button>
+        </div>
+    </div>
+    
+    <!-- PDF转Word页面 -->
+    <div id="pdf-to-word-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>PDF转Word</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="function-title">PDF转换为可编辑Word文档</div>
+                
+                <div class="function-desc">
+                    <ul>
+                        <li>保持原始文档的排版和格式</li>
+                        <li>支持文字、图片、表格等内容</li>
+                        <li>转换后可编辑和修改</li>
+                        <li>高精度OCR文字识别</li>
+                    </ul>
+                </div>
+                
+                <div class="upload-area" onclick="uploadPDF()">
+                    <i class="icon icon-upload"></i>
+                    <p>点击上传PDF文件</p>
+                    <p style="font-size: 12px; margin-top: 5px;">支持扫描版和文字版PDF</p>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="setting-item">
+                        <div class="setting-label">OCR识别</div>
+                        <label class="toggle">
+                            <input type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">保持页面布局</div>
+                        <label class="toggle">
+                            <input type="checkbox" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-bar">
+            <div class="selected-info">未选择文件</div>
+            <button class="primary-btn" onclick="convertToWord()">开始转换</button>
+        </div>
+    </div>
+    
+    <!-- PDF压缩页面 -->
+    <div id="compress-pdf-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>PDF压缩</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="function-title">压缩PDF文件大小</div>
+                
+                <div class="function-desc">
+                    <ul>
+                        <li>智能压缩PDF文件，减小文件体积</li>
+                        <li>保持文档质量和可读性</li>
+                        <li>支持批量压缩多个PDF文件</li>
+                        <li>压缩率最高可达90%</li>
+                    </ul>
+                </div>
+                
+                <div class="upload-area" onclick="uploadPDF()">
+                    <i class="icon icon-upload"></i>
+                    <p>点击上传PDF文件</p>
+                    <p style="font-size: 12px; margin-top: 5px;">当前文件大小: 0MB</p>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="setting-item">
+                        <div class="setting-label">压缩级别</div>
+                        <div class="setting-value">推荐</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">预估压缩后大小</div>
+                        <div class="setting-value">-- MB</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">删除元数据</div>
+                        <label class="toggle">
+                            <input type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-bar">
+            <div class="selected-info">未选择文件</div>
+            <button class="primary-btn" onclick="compressPDF()">开始压缩</button>
+        </div>
+    </div>
+    
+    <!-- 添加水印页面 -->
+    <div id="add-watermark-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>添加水印/密码</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="function-title">为PDF添加水印或密码保护</div>
+                
+                <div class="function-desc">
+                    <ul>
+                        <li>支持文字和图片水印</li>
+                        <li>可自定义水印位置、大小和透明度</li>
+                        <li>为PDF添加打开密码和权限密码</li>
+                        <li>保护文档安全和版权</li>
+                    </ul>
+                </div>
+                
+                <div class="upload-area" onclick="uploadPDF()">
+                    <i class="icon icon-upload"></i>
+                    <p>点击上传PDF文件</p>
+                </div>
+                
+                <div class="settings-group">
+                    <div class="setting-item">
+                        <div class="setting-label">水印类型</div>
+                        <div class="setting-value">文字水印</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">水印文字</div>
+                        <div class="setting-value">请设置水印文字</div>
+                    </div>
+                    <div class="setting-item">
+                        <div class="setting-label">添加打开密码</div>
+                        <label class="toggle">
+                            <input type="checkbox">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="action-bar">
+            <div class="selected-info">未选择文件</div>
+            <button class="primary-btn" onclick="addWatermark()">添加水印</button>
+        </div>
+    </div>
+    
+    <!-- 转换记录页面 -->
+    <div id="history-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>转换记录</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="section-title">
+                    <i class="icon icon-history"></i>
+                    最近转换记录
+                </div>
+                
+                <div class="record-list">
+                    <div class="record-item">
+                        <div class="record-icon">
+                            <i class="icon icon-pdf"></i>
+                        </div>
+                        <div class="record-info">
+                            <div class="record-name">工作报告.pdf</div>
+                            <div class="record-detail">图片转PDF • 2023-10-29 15:30</div>
+                        </div>
+                        <div class="record-action">查看</div>
+                    </div>
+                    
+                    <div class="record-item">
+                        <div class="record-icon">
+                            <i class="icon icon-word"></i>
+                        </div>
+                        <div class="record-info">
+                            <div class="record-name">合同文档.docx</div>
+                            <div class="record-detail">PDF转Word • 2023-10-28 11:20</div>
+                        </div>
+                        <div class="record-action">查看</div>
+                    </div>
+                    
+                    <div class="record-item">
+                        <div class="record-icon">
+                            <i class="icon icon-excel"></i>
+                        </div>
+                        <div class="record-info">
+                            <div class="record-name">数据报表.xlsx</div>
+                            <div class="record-detail">PDF转Excel • 2023-10-27 09:45</div>
+                        </div>
+                        <div class="record-action">查看</div>
+                    </div>
+                    
+                    <div class="record-item">
+                        <div class="record-icon">
+                            <i class="icon icon-image"></i>
+                        </div>
+                        <div class="record-info">
+                            <div class="record-name">产品图片集</div>
+                            <div class="record-detail">图片转PDF • 2023-10-26 16:15</div>
+                        </div>
+                        <div class="record-action">查看</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 我的页面 -->
+    <div id="profile-page" class="page">
+        <div class="header">
+            <div class="back-btn" onclick="navigateTo('home-page')">
+                <i class="icon icon-back"></i>
+            </div>
+            <h1>我的</h1>
+        </div>
+        
+        <div class="container">
+            <div class="section">
+                <div class="setting-item">
+                    <div class="setting-label">会员状态</div>
+                    <div class="setting-value">普通用户</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">已用空间</div>
+                    <div class="setting-value">125MB/500MB</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">消息通知</div>
+                    <label class="toggle">
+                        <input type="checkbox" checked>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">自动备份</div>
+                    <label class="toggle">
+                        <input type="checkbox">
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="section">
+                <div class="setting-item">
+                    <div class="setting-label">联系客服</div>
+                    <div class="setting-value"></div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">分享给好友</div>
+                    <div class="setting-value"></div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">清理缓存</div>
+                    <div class="setting-value">35.2MB</div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-label">版本信息</div>
+                    <div class="setting-value">v2.5.1</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 页面导航函数
+        function navigateTo(pageId) {
+            document.querySelectorAll('.page').forEach(page => {
+                page.classList.remove('active');
+            });
+            document.getElementById(pageId).classList.add('active');
+            
+            // 更新底部导航栏状态
+            document.querySelectorAll('.tab-item').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            if (pageId === 'home-page') {
+                document.querySelectorAll('.tab-item')[0].classList.add('active');
+            } else if (pageId === 'scan-page') {
+                document.querySelectorAll('.tab-item')[1].classList.add('active');
+            } else if (pageId === 'history-page') {
+                document.querySelectorAll('.tab-item')[2].classList.add('active');
+            } else if (pageId === 'profile-page') {
+                document.querySelectorAll('.tab-item')[3].classList.add('active');
+            }
+        }
+        
+        // 模拟图片数据
+        let selectedImages = [];
+        
+        // 添加图片函数
+        function addImages() {
+            // 模拟添加图片
+            if (selectedImages.length < 30) {
+                const newImage = {
+                    id: selectedImages.length + 1,
+                    name: `图片${selectedImages.length + 1}.jpg`
+                };
+                selectedImages.push(newImage);
+                updateImageGrid();
+            } else {
+                alert('最多只能选择30张图片');
+            }
+        }
+        
+        // 删除图片函数
+        function removeImage(id) {
+            selectedImages = selectedImages.filter(img => img.id !== id);
+            updateImageGrid();
+        }
+        
+        // 更新图片网格显示
+        function updateImageGrid() {
+            const imageGrid = document.getElementById('image-grid');
+            const selectedInfo = document.getElementById('selected-info');
+            
+            // 更新选择信息
+            selectedInfo.textContent = `已选择 ${selectedImages.length} 张图片`;
+            
+            // 清空当前显示
+            imageGrid.innerHTML = '';
+            
+            // 添加已选图片
+            selectedImages.forEach(img => {
+                const imageItem = document.createElement('div');
+                imageItem.className = 'image-item';
+                imageItem.innerHTML = `
+                    <img src="https://via.placeholder.com/150/1a6dff/ffffff?text=图片${img.id}" alt="${img.name}">
+                    <div class="delete-btn" onclick="removeImage(${img.id})">
+                        <i class="icon icon-close"></i>
+                    </div>
+                `;
+                imageGrid.appendChild(imageItem);
+            });
+            
+            // 添加"添加图片"按钮
+            if (selectedImages.length < 30) {
+                const addButton = document.createElement('div');
+                addButton.className = 'image-item add-btn';
+                addButton.innerHTML = '<i class="icon icon-add"></i>';
+                addButton.onclick = addImages;
+                imageGrid.appendChild(addButton);
+            }
+        }
+        
+        // 合并PDF函数
+        function mergeToPDF() {
+            if (selectedImages.length === 0) {
+                alert('请至少选择一张图片');
+                return;
+            }
+            
+            alert(`开始合并 ${selectedImages.length} 张图片为PDF文件`);
+            // 实际应用中这里会有真正的PDF合并逻辑
+        }
+        
+        // 上传PDF函数
+        function uploadPDF() {
+            alert('打开文件选择器，选择PDF文件');
+            // 实际应用中这里会有文件上传逻辑
+        }
+        
+        // 各种转换函数
+        function convertToImages() {
+            alert('开始将PDF转换为图片');
+        }
+        
+        function convertToExcel() {
+            alert('开始将PDF转换为Excel');
+        }
+        
+        function convertToWord() {
+            alert('开始将PDF转换为Word');
+        }
+        
+        function compressPDF() {
+            alert('开始压缩PDF文件');
+        }
+        
+        function addWatermark() {
+            alert('开始添加水印');
+        }
+    </script>
+</body>
+</html>

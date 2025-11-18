@@ -1,0 +1,35 @@
+<view class="container">
+  <view class="section">
+    <view class="title">Word转PDF</view>
+    <view class="desc">将Word文档转换为PDF格式，保留所有格式和样式</view>
+    
+    <view class="upload-area" bindtap="chooseFile">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择Word文件</view>
+      <view class="upload-hint">支持.doc和.docx格式，50MB以内</view>
+    </view>
+    
+    <view wx:if="{{fileName}}" class="file-info">
+      <text class="file-name">📄 {{fileName}}</text>
+      <text class="file-size">{{fileSize}}</text>
+    </view>
+    
+    <button 
+      class="convert-btn {{converting ? 'disabled' : ''}}" 
+      bindtap="convertToPdf"
+      disabled="{{converting || !wordFile}}"
+    >
+      {{converting ? '转换中...' : '开始转换'}}
+    </button>
+    
+    <view wx:if="{{pdfUrl}}" class="result">
+      <view class="success-icon">✓</view>
+      <view class="success-text">转换成功！</view>
+      <button class="download-btn" bindtap="downloadPdf">下载PDF文件</button>
+    </view>
+    
+    <view wx:if="{{error}}" class="error">
+      <text>❌ {{error}}</text>
+    </view>
+  </view>
+</view>

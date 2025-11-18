@@ -1,0 +1,12 @@
+<view class="wrap">
+  <view class="panel">
+    <view class="h1">文件拆分</view>
+    <view class="uploader" bindtap="choosePdf">点击选择PDF文件</view>
+  </view>
+  <view class="footer">
+    <view>{{filename || '未选择文件'}}</view>
+    <button type="primary" bindtap="submit" disabled="{{!tempFilePath}}">开始拆分</button>
+  </view>
+</view>
+
+

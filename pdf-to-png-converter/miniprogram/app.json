@@ -1,0 +1,39 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/pptconvert/index",
+    "pages/img2pdf/index",
+    "pages/pdf2img/index",
+    "pages/pdf2excel/index",
+    "pages/pdf2word/index",
+    "pages/word2pdf/index",
+    "pages/excel2pdf/index",
+    "pages/rotate/index",
+    "pages/merge/index",
+    "pages/split/index",
+    "pages/reorder/index",
+    "pages/scan/index",
+    "pages/records/index",
+    "pages/me/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "PDF转换大师-悦智通",
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#888888",
+    "selectedColor": "#1a6dff",
+    "backgroundColor": "#ffffff",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页" },
+      { "pagePath": "pages/scan/index", "text": "证件扫描仪" },
+      { "pagePath": "pages/records/index", "text": "转换记录" },
+      { "pagePath": "pages/me/index", "text": "我的" }
+    ]
+  }
+}
+
+

@@ -1,0 +1,21 @@
+<view class="container">
+  <view class="actions">
+    <button type="primary" bindtap="choosePdf">选择 PDF</button>
+    <button bindtap="uploadPdf" disabled="{{!tempFilePath}}">上传并转换</button>
+  </view>
+  <view class="tip">服务器地址：{{serverUrl}}</view>
+  <view class="tip">已选文件：{{tempFilePath || '无'}}</view>
+
+  <block wx:if="{{images.length}}">
+    <view class="grid">
+      <block wx:for="{{images}}" wx:key="name">
+        <view class="card">
+          <image mode="widthFix" src="{{item.url}}" />
+          <view class="meta">{{item.name}} ({{item.width}}x{{item.height}})</view>
+        </view>
+      </block>
+    </view>
+  </block>
+</view>
+
+

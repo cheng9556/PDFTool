@@ -1,0 +1,23 @@
+server:
+  port: 8788
+
+spring:
+  application:
+    name: excel-to-pdf-server
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+# JodConverter配置
+jodconverter:
+  local:
+    enabled: true
+    # LibreOffice安装路径（根据实际安装路径修改）
+    office-home: C:/Program Files/LibreOffice
+    port-numbers: 2002
+    max-tasks-per-process: 100
+    task-execution-timeout: 120000
+    task-queue-timeout: 30000
+
+

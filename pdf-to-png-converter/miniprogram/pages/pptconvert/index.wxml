@@ -1,0 +1,106 @@
+<view class="container">
+  <view class="section">
+    <view class="title">PPT转换</view>
+    <view class="tips">
+      <view>• 选择PDF文件 → 自动转换为PPT</view>
+      <view>• 选择PPT文件 → 自动转换为PDF</view>
+      <view>• 文件大小限制：60MB以内</view>
+      <view>• 建议页数：100页以内</view>
+    </view>
+    
+    <!-- 文件选择 -->
+    <view class="upload-area" bindtap="chooseFile">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF或PPT文件</view>
+      <view class="upload-hint">支持.pdf、.ppt、.pptx格式</view>
+    </view>
+    
+    <!-- 文件信息 -->
+    <view wx:if="{{filename}}" class="file-info">
+      <view class="file-item">
+        <text class="file-label">文件名:</text>
+        <text class="file-value">{{filename}}</text>
+      </view>
+      <view class="file-item">
+        <text class="file-label">文件大小:</text>
+        <text class="file-value">{{fileSize}}</text>
+      </view>
+      <view class="file-item">
+        <text class="file-label">转换方向:</text>
+        <text class="file-value convert-direction">
+          {{fileType === 'pdf' ? 'PDF → PPT' : 'PPT → PDF'}}
+        </text>
+      </view>
+    </view>
+    
+    <!-- 转换按钮 -->
+    <button 
+      class="convert-btn {{converting ? 'disabled' : ''}}" 
+      bindtap="startConvert"
+      disabled="{{converting || !tempFilePath}}"
+    >
+      <text wx:if="{{!converting}}">{{fileType === 'pdf' ? '转换为PPT' : '转换为PDF'}}</text>
+      <text wx:else>转换中...</text>
+    </button>
+  </view>
+
+  <!-- 转换结果 -->
+  <view wx:if="{{result}}" class="result-section">
+    <view class="result-header">
+      <text class="success-icon">✓</text>
+      <text class="success-text">转换成功！</text>
+    </view>
+    
+    <view class="result-info">
+      <view class="result-item">
+        <text class="result-label">输出文件:</text>
+        <text class="result-value">{{result.filename}}</text>
+      </view>
+      <view wx:if="{{result.pages}}" class="result-item">
+        <text class="result-label">页数:</text>
+        <text class="result-value">{{result.pages}} 页</text>
+      </view>
+      <view wx:if="{{result.size}}" class="result-item">
+        <text class="result-label">文件大小:</text>
+        <text class="result-value">{{result.fileSizeFormatted}}</text>
+      </view>
+      <view wx:if="{{result.conversion_time}}" class="result-item">
+        <text class="result-label">转换耗时:</text>
+        <text class="result-value">{{result.conversion_time || result.conversionTime}}</text>
+      </view>
+    </view>
+    
+    <view class="result-actions">
+      <button class="action-btn preview-btn" bindtap="downloadFile">
+        预览/下载
+      </button>
+      <button class="action-btn reset-btn" bindtap="resetConvert">
+        重新转换
+      </button>
+    </view>
+  </view>
+
+  <!-- 说明 -->
+  <view class="help-section">
+    <view class="help-title">💡 转换说明</view>
+    <view class="help-content">
+      <view class="help-item">
+        <text class="help-icon">📄</text>
+        <text class="help-text">PDF转PPT：使用高质量图片方式，保留原始排版</text>
+      </view>
+      <view class="help-item">
+        <text class="help-icon">📊</text>
+        <text class="help-text">PPT转PDF：使用LibreOffice引擎，完美保留格式</text>
+      </view>
+      <view class="help-item">
+        <text class="help-icon">⚡</text>
+        <text class="help-text">高性能：平均200ms/页，快速转换</text>
+      </view>
+      <view class="help-item">
+        <text class="help-icon">🎯</text>
+        <text class="help-text">高质量：150 DPI，演示级清晰度</text>
+      </view>
+    </view>
+  </view>
+</view>
+
