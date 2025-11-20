@@ -14,3 +14,4 @@ fire>=0.3.0
 fonttools>=4.24.0
 opencv-python-headless>=4.5,<4.12
 Pillow>=10.0.0  # 图像处理和PDF预览
+reportlab>=4.0.0  # 文本转PDF

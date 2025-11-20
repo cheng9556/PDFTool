@@ -915,6 +915,225 @@ def pdf_to_ppt():
         return jsonify({'error': f'转换失败: {str(e)}'}), 500
 
 
+@app.route('/text/to-pdf', methods=['POST'])
+def text_to_pdf():
+    """
+    文本转PDF - 高性能优化版
+    支持：
+    1. 直接输入文本
+    2. 上传TXT文件
+    3. 自动换行和分页
+    4. 中文字体支持
+    5. 高质量输出
+    """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.units import cm
+    
+    start_time = datetime.now()
+    logger.info("========================================")
+    logger.info("收到文本转PDF请求")
+    
+    try:
+        # 获取文本内容
+        text_content = None
+        source_type = None
+        
+        # 方式1：直接文本输入
+        if 'text' in request.form:
+            text_content = request.form.get('text', '').strip()
+            source_type = 'direct'
+            logger.info(f"输入方式: 直接文本输入")
+            logger.info(f"文本长度: {len(text_content)} 字符")
+        
+        # 方式2：TXT文件上传
+        elif 'file' in request.files:
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({'error': '未选择文件'}), 400
+            
+            # 检查文件扩展名
+            if not file.filename.lower().endswith('.txt'):
+                return jsonify({'error': '只支持TXT文件'}), 400
+            
+            # 读取文件内容（支持多种编码）
+            file_content = file.read()
+            
+            # 尝试多种编码
+            for encoding in ['utf-8', 'gbk', 'gb2312', 'utf-16']:
+                try:
+                    text_content = file_content.decode(encoding)
+                    logger.info(f"文件编码: {encoding}")
+                    break
+                except:
+                    continue
+            
+            if text_content is None:
+                return jsonify({'error': '无法识别文件编码'}), 400
+            
+            source_type = 'file'
+            logger.info(f"输入方式: TXT文件上传")
+            logger.info(f"文件名: {file.filename}")
+            logger.info(f"文件大小: {len(file_content)} 字节")
+            logger.info(f"文本长度: {len(text_content)} 字符")
+        
+        else:
+            return jsonify({'error': '请提供文本内容或上传TXT文件'}), 400
+        
+        # 验证文本内容
+        if not text_content:
+            return jsonify({'error': '文本内容为空'}), 400
+        
+        # 文件大小限制（10MB文本）
+        if len(text_content) > 10 * 1024 * 1024:
+            return jsonify({'error': '文本内容过大（最大10MB）'}), 400
+        
+        # 获取配置参数
+        font_size = int(request.form.get('font_size', 12))
+        line_spacing = float(request.form.get('line_spacing', 1.5))
+        margin_left = float(request.form.get('margin_left', 2.5))
+        margin_right = float(request.form.get('margin_right', 2.5))
+        margin_top = float(request.form.get('margin_top', 2.5))
+        margin_bottom = float(request.form.get('margin_bottom', 2.5))
+        
+        logger.info(f"配置参数:")
+        logger.info(f"  字体大小: {font_size}")
+        logger.info(f"  行间距: {line_spacing}")
+        logger.info(f"  页边距: 左{margin_left}cm, 右{margin_right}cm, 上{margin_top}cm, 下{margin_bottom}cm")
+        
+        # 创建PDF
+        pdf_filename = f"text2pdf_{uuid.uuid4().hex[:8]}.pdf"
+        pdf_path = os.path.join(app.config['CONVERTED_FOLDER'], pdf_filename)
+        
+        # 注册中文字体（使用系统字体）
+        font_name = 'SimSun'
+        try:
+            # Windows系统字体路径
+            font_paths = [
+                'C:/Windows/Fonts/simsun.ttc',
+                'C:/Windows/Fonts/msyh.ttc',  # 微软雅黑
+                'C:/Windows/Fonts/simhei.ttf'  # 黑体
+            ]
+            
+            font_registered = False
+            for font_path in font_paths:
+                if os.path.exists(font_path):
+                    try:
+                        pdfmetrics.registerFont(TTFont(font_name, font_path))
+                        font_registered = True
+                        logger.info(f"字体注册成功: {font_path}")
+                        break
+                    except Exception as e:
+                        logger.warning(f"字体注册失败 {font_path}: {str(e)}")
+                        continue
+            
+            if not font_registered:
+                logger.warning("未找到中文字体，使用默认字体")
+                font_name = 'Helvetica'
+        
+        except Exception as e:
+            logger.error(f"字体注册错误: {str(e)}")
+            font_name = 'Helvetica'
+        
+        # 创建PDF画布
+        c = canvas.Canvas(pdf_path, pagesize=A4)
+        width, height = A4
+        
+        # 计算可用区域
+        usable_width = width - margin_left * cm - margin_right * cm
+        usable_height = height - margin_top * cm - margin_bottom * cm
+        
+        # 设置字体
+        c.setFont(font_name, font_size)
+        
+        # 计算行高
+        line_height = font_size * line_spacing
+        
+        # 分行处理
+        lines = text_content.split('\n')
+        current_y = height - margin_top * cm
+        page_count = 1
+        char_count = 0
+        
+        logger.info(f"开始转换...")
+        
+        for line in lines:
+            # 空行处理
+            if not line.strip():
+                current_y -= line_height
+                if current_y < margin_bottom * cm:
+                    c.showPage()
+                    c.setFont(font_name, font_size)
+                    current_y = height - margin_top * cm
+                    page_count += 1
+                continue
+            
+            # 自动换行
+            words = []
+            current_word = ''
+            
+            for char in line:
+                current_word += char
+                char_width = c.stringWidth(current_word, font_name, font_size)
+                
+                if char_width >= usable_width:
+                    if len(current_word) > 1:
+                        words.append(current_word[:-1])
+                        current_word = char
+                    else:
+                        words.append(current_word)
+                        current_word = ''
+            
+            if current_word:
+                words.append(current_word)
+            
+            # 输出每一行
+            for word in words:
+                if current_y < margin_bottom * cm + line_height:
+                    c.showPage()
+                    c.setFont(font_name, font_size)
+                    current_y = height - margin_top * cm
+                    page_count += 1
+                
+                c.drawString(margin_left * cm, current_y, word)
+                current_y -= line_height
+                char_count += len(word)
+        
+        # 保存PDF
+        c.save()
+        
+        pdf_size = os.path.getsize(pdf_path)
+        total_duration = (datetime.now() - start_time).total_seconds()
+        
+        logger.info(f"========================================")
+        logger.info(f"文本转PDF完成！")
+        logger.info(f"生成PDF: {pdf_filename}")
+        logger.info(f"PDF大小: {pdf_size/1024:.1f} KB")
+        logger.info(f"页数: {page_count}")
+        logger.info(f"字符数: {char_count}")
+        logger.info(f"总耗时: {total_duration:.2f}s")
+        logger.info(f"转换速度: {char_count/total_duration:.0f} 字符/秒")
+        logger.info(f"========================================")
+        
+        return jsonify({
+            'url': f'/download/{pdf_filename}',
+            'filename': pdf_filename,
+            'pages': page_count,
+            'size': pdf_size,
+            'characters': char_count,
+            'conversion_time': f'{total_duration:.2f}s',
+            'source_type': source_type,
+            'message': '转换成功'
+        })
+        
+    except Exception as e:
+        logger.error(f"文本转PDF失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'转换失败: {str(e)}'}), 500
+
+
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
     """下载转换后的文件"""
