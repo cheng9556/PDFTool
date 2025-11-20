@@ -2,6 +2,7 @@
   "pages": [
     "pages/home/index",
     "pages/pptconvert/index",
+    "pages/text2pdf/index",
     "pages/img2pdf/index",
     "pages/pdf2img/index",
     "pages/pdf2excel/index",

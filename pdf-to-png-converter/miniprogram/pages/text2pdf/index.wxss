@@ -1,0 +1,232 @@
+.wrap { 
+  padding: 24rpx; 
+  padding-bottom: 120rpx;
+}
+
+.panel { 
+  background: #fff; 
+  border-radius: 16rpx; 
+  padding: 24rpx; 
+  box-shadow: 0 2rpx 12rpx rgba(0,0,0,0.05); 
+}
+
+.h1 { 
+  font-size: 32rpx; 
+  font-weight: 700; 
+  margin-bottom: 16rpx; 
+  color: #333;
+}
+
+.tips { 
+  background: #f0f6ff; 
+  color: #3b82f6; 
+  padding: 16rpx; 
+  border-radius: 12rpx; 
+  font-size: 26rpx; 
+  margin-bottom: 20rpx;
+}
+
+.tips view { 
+  margin: 6rpx 0; 
+}
+
+/* 模式切换 */
+.mode-switch {
+  display: flex;
+  gap: 16rpx;
+  margin: 20rpx 0;
+}
+
+.mode-btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  text-align: center;
+  background: #f5f5f5;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  color: #666;
+  transition: all 0.3s;
+}
+
+.mode-btn.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+/* 文本输入区域 */
+.input-area {
+  margin: 20rpx 0;
+}
+
+.text-input {
+  width: 100%;
+  min-height: 400rpx;
+  padding: 20rpx;
+  background: #f9fafb;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  line-height: 1.6;
+  box-sizing: border-box;
+}
+
+.char-count {
+  text-align: right;
+  font-size: 24rpx;
+  color: #999;
+  margin-top: 8rpx;
+}
+
+/* 文件上传区域 */
+.upload-area {
+  margin: 20rpx 0;
+  padding: 60rpx 20rpx;
+  border: 2rpx dashed #3b82f6;
+  border-radius: 16rpx;
+  text-align: center;
+  background: #f9fafb;
+}
+
+.upload-icon {
+  font-size: 80rpx;
+  margin-bottom: 16rpx;
+}
+
+.upload-text {
+  font-size: 28rpx;
+  color: #3b82f6;
+  margin-bottom: 8rpx;
+  font-weight: 500;
+}
+
+.upload-hint {
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 文件信息 */
+.file-info {
+  display: flex;
+  align-items: center;
+  padding: 20rpx;
+  background: #f9fafb;
+  border-radius: 12rpx;
+  margin: 20rpx 0;
+}
+
+.file-icon {
+  font-size: 48rpx;
+  margin-right: 16rpx;
+}
+
+.file-details {
+  flex: 1;
+}
+
+.file-name {
+  font-size: 28rpx;
+  color: #333;
+  margin-bottom: 4rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-size {
+  font-size: 24rpx;
+  color: #999;
+}
+
+.file-remove {
+  width: 48rpx;
+  height: 48rpx;
+  line-height: 48rpx;
+  text-align: center;
+  color: #999;
+  font-size: 32rpx;
+}
+
+/* 参数设置 */
+.settings {
+  margin: 30rpx 0;
+  padding: 20rpx;
+  background: #f9fafb;
+  border-radius: 12rpx;
+}
+
+.setting-item {
+  margin-bottom: 24rpx;
+}
+
+.setting-item:last-child {
+  margin-bottom: 0;
+}
+
+.setting-label {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 12rpx;
+}
+
+.setting-slider {
+  width: 100%;
+}
+
+/* 转换结果 */
+.result {
+  margin-top: 30rpx;
+  padding: 24rpx;
+  background: #f0fdf4;
+  border-radius: 12rpx;
+  border: 2rpx solid #86efac;
+}
+
+.result-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #16a34a;
+  margin-bottom: 16rpx;
+}
+
+.result-info {
+  margin-bottom: 20rpx;
+}
+
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+  font-size: 26rpx;
+}
+
+.result-label {
+  color: #666;
+}
+
+.result-value {
+  color: #333;
+  font-weight: 500;
+}
+
+.download-btn {
+  width: 100%;
+  background: #16a34a;
+  border: none;
+}
+
+/* 底部按钮 */
+.footer { 
+  position: fixed; 
+  left: 0; 
+  right: 0; 
+  bottom: 0; 
+  background: #fff; 
+  padding: 20rpx 24rpx; 
+  box-shadow: 0 -2rpx 12rpx rgba(0,0,0,0.05); 
+}
+
+.footer button {
+  width: 100%;
+}
+
+

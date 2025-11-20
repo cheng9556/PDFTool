@@ -11,6 +11,7 @@ Page({
   goWord2Pdf() { wx.navigateTo({ url: '/pages/word2pdf/index' }); },
   goPptConvert() { wx.navigateTo({ url: '/pages/pptconvert/index' }); },
   goExcel2Pdf() { wx.navigateTo({ url: '/pages/excel2pdf/index' }); },
+  goText2Pdf() { wx.navigateTo({ url: '/pages/text2pdf/index' }); },
   goRotate() { wx.navigateTo({ url: '/pages/rotate/index' }); },
   goMerge() { wx.navigateTo({ url: '/pages/merge/index' }); },
   goSplit() { wx.navigateTo({ url: '/pages/split/index' }); },

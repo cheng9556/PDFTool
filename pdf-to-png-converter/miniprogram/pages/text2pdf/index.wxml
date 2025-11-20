@@ -1,0 +1,118 @@
+<view class="wrap">
+  <view class="panel">
+    <view class="h1">文本转PDF文件</view>
+    
+    <view class="tips">
+      <view>• 支持直接输入文本或上传TXT文件</view>
+      <view>• 自动换行和分页，支持中文</view>
+      <view>• 文本大小最大10MB</view>
+    </view>
+
+    <!-- 输入模式切换 -->
+    <view class="mode-switch">
+      <view class="mode-btn {{inputMode === 'text' ? 'active' : ''}}" bindtap="switchMode" data-mode="text">
+        直接输入
+      </view>
+      <view class="mode-btn {{inputMode === 'file' ? 'active' : ''}}" bindtap="switchMode" data-mode="file">
+        上传TXT
+      </view>
+    </view>
+
+    <!-- 直接输入模式 -->
+    <view wx:if="{{inputMode === 'text'}}" class="input-area">
+      <textarea 
+        class="text-input" 
+        placeholder="请输入要转换的文本内容..." 
+        value="{{textContent}}"
+        bindinput="onTextInput"
+        maxlength="-1"
+        auto-height
+      />
+      <view class="char-count">已输入 {{textContent.length}} 个字符</view>
+    </view>
+
+    <!-- 上传文件模式 -->
+    <view wx:if="{{inputMode === 'file'}}">
+      <view wx:if="{{!fileName}}" class="upload-area" bindtap="chooseTxtFile">
+        <view class="upload-icon">📄</view>
+        <view class="upload-text">点击选择TXT文件</view>
+        <view class="upload-hint">支持TXT格式，最大10MB</view>
+      </view>
+
+      <view wx:if="{{fileName}}" class="file-info">
+        <view class="file-icon">📄</view>
+        <view class="file-details">
+          <view class="file-name">{{fileName}}</view>
+          <view class="file-size">{{fileSizeFormatted}}</view>
+        </view>
+        <view class="file-remove" bindtap="resetConvert">✕</view>
+      </view>
+    </view>
+
+    <!-- 参数设置 -->
+    <view class="settings">
+      <view class="setting-item">
+        <view class="setting-label">字体大小</view>
+        <slider 
+          class="setting-slider"
+          min="8" 
+          max="24" 
+          value="{{fontSize}}" 
+          bindchange="onFontSizeChange"
+          show-value
+        />
+      </view>
+      
+      <view class="setting-item">
+        <view class="setting-label">行间距</view>
+        <slider 
+          class="setting-slider"
+          min="1.0" 
+          max="3.0" 
+          step="0.1"
+          value="{{lineSpacing}}" 
+          bindchange="onLineSpacingChange"
+          show-value
+        />
+      </view>
+    </view>
+
+    <!-- 转换结果 -->
+    <view wx:if="{{converted}}" class="result">
+      <view class="result-title">✓ 转换成功</view>
+      <view class="result-info">
+        <view class="result-item">
+          <view class="result-label">页数:</view>
+          <view class="result-value">{{resultPages}} 页</view>
+        </view>
+        <view class="result-item">
+          <view class="result-label">字符:</view>
+          <view class="result-value">{{resultChars}} 字符</view>
+        </view>
+        <view class="result-item">
+          <view class="result-label">大小:</view>
+          <view class="result-value">{{resultSizeFormatted}}</view>
+        </view>
+        <view class="result-item">
+          <view class="result-label">耗时:</view>
+          <view class="result-value">{{conversionTime}}</view>
+        </view>
+      </view>
+      <button class="download-btn" type="primary" bindtap="downloadPdf">下载PDF</button>
+    </view>
+  </view>
+
+  <!-- 底部按钮 -->
+  <view class="footer">
+    <button 
+      type="primary" 
+      bindtap="startConvert" 
+      disabled="{{converting || (inputMode === 'text' && !textContent.trim()) || (inputMode === 'file' && !fileName)}}"
+      loading="{{converting}}"
+    >
+      {{converting ? '转换中...' : '开始转换'}}
+    </button>
+  </view>
+</view>
+
+

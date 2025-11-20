@@ -17,7 +17,7 @@
       <view class="menu-item" bindtap="goWord2Pdf"><view class="icon icon-word"></view><text class="label">Word转PDF</text></view>
       <view class="menu-item" bindtap="goPptConvert"><view class="icon icon-ppt"></view><text class="label">PPT转换</text></view>
       <view class="menu-item" bindtap="goExcel2Pdf"><view class="icon icon-excel"></view><text class="label">Excel转PDF</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">文字转PDF</text></view>
+      <view class="menu-item" bindtap="goText2Pdf"><view class="icon icon-pdf"></view><text class="label">文字转PDF</text></view>
     </view>
   </view>
   
