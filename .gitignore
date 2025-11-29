@@ -1,0 +1,33 @@
+# 临时文件和输出目录
+server-python/converted/
+server-python/uploads/
+server-python/temp/
+server-python/test*.pdf
+server-python/test*.txt
+server-python/test*.py
+server-python/*.ps1
+
+# 测试输出
+test-output/
+test-results/
+
+# 原型文件中的临时图片
+原型/截图/
+
+# 日志文件
+*.log
+
+# IDE配置
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 其他临时文件
+simple-*.txt
+simple-*.py
+
