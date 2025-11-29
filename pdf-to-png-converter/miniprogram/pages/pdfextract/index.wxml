@@ -1,0 +1,115 @@
+<view class="wrap">
+  <!-- 未上传状态 -->
+  <view wx:if="{{!pdfUploaded}}" class="panel">
+    <view class="h1">提取PDF内嵌图片</view>
+    
+    <view class="tips">
+      <view>• 支持提取PDF中的文字和图片</view>
+      <view>• 文件大小最大100MB</view>
+    </view>
+
+    <view class="upload-area" bindtap="choosePdf">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持PDF格式，最大100MB</view>
+    </view>
+  </view>
+
+  <!-- 已上传状态 -->
+  <view wx:if="{{pdfUploaded}}" class="content">
+    <!-- 文件信息 -->
+    <view class="file-info-bar">
+      <view class="file-info-text">
+        <view class="file-name">{{fileName}}</view>
+        <view class="file-meta">共{{totalPages}}页</view>
+      </view>
+      <view class="file-change" bindtap="resetUpload">更换</view>
+    </view>
+
+    <!-- 当前页面预览 -->
+    <view class="preview-panel">
+      <view class="preview-header">
+        <view class="preview-title">第 {{currentPage}} / {{totalPages}} 页</view>
+      </view>
+      
+      <view class="preview-image-wrapper">
+        <image 
+          class="preview-image" 
+          src="{{currentThumbnail}}" 
+          mode="widthFix"
+        />
+      </view>
+    </view>
+
+    <!-- 缩略图列表 -->
+    <view class="thumbnails-panel">
+      <view class="thumbnails-title">所有页面</view>
+      <scroll-view class="thumbnails-scroll" scroll-x>
+        <view class="thumbnails-list">
+          <view 
+            wx:for="{{thumbnails}}" 
+            wx:key="page"
+            class="thumbnail-item {{currentPage === item.page ? 'active' : ''}}"
+            bindtap="switchPage"
+            data-page="{{item.page}}"
+          >
+            <image class="thumbnail-img" src="{{item.data}}" mode="aspectFit" />
+            <view class="thumbnail-label">第{{item.page}}页</view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="action-buttons">
+      <button 
+        class="action-btn" 
+        bindtap="copyText"
+        disabled="{{extracting}}"
+      >
+        <view class="btn-icon">📝</view>
+        <view class="btn-text">复制文字</view>
+      </button>
+      
+      <button 
+        class="action-btn" 
+        bindtap="showSaveImageOptions"
+        disabled="{{extracting}}"
+      >
+        <view class="btn-icon">🖼️</view>
+        <view class="btn-text">保存图像</view>
+      </button>
+    </view>
+
+    <!-- 已提取文字显示 -->
+    <view wx:if="{{hasText}}" class="text-result">
+      <view class="text-result-header">已提取的文字（已复制到剪贴板）</view>
+      <view class="text-result-content">{{extractedText}}</view>
+    </view>
+  </view>
+
+  <!-- 保存图像选项弹窗 -->
+  <view wx:if="{{showImageOptions}}" class="modal-mask" bindtap="hideSaveImageOptions">
+    <view class="modal-content" catchtap="doNothing">
+      <view class="modal-title">选择保存方式</view>
+      
+      <view class="modal-option" bindtap="savePageAsImage">
+        <view class="option-icon">📄</view>
+        <view class="option-info">
+          <view class="option-title">保存整个页面为图像</view>
+          <view class="option-desc">将当前页面渲染为高清图片</view>
+        </view>
+      </view>
+      
+      <view class="modal-option" bindtap="saveEmbeddedImages">
+        <view class="option-icon">🖼️</view>
+        <view class="option-info">
+          <view class="option-title">保存页面内嵌入的图像</view>
+          <view class="option-desc">提取页面中的原始图片</view>
+        </view>
+      </view>
+      
+      <view class="modal-cancel" bindtap="hideSaveImageOptions">取消</view>
+    </view>
+  </view>
+</view>

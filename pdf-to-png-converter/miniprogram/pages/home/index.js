@@ -12,10 +12,13 @@ Page({
   goPptConvert() { wx.navigateTo({ url: '/pages/pptconvert/index' }); },
   goExcel2Pdf() { wx.navigateTo({ url: '/pages/excel2pdf/index' }); },
   goText2Pdf() { wx.navigateTo({ url: '/pages/text2pdf/index' }); },
+  goPdfExtract() { wx.navigateTo({ url: '/pages/pdfextract/index' }); },
   goRotate() { wx.navigateTo({ url: '/pages/rotate/index' }); },
+  goCompress() { wx.navigateTo({ url: '/pages/compress/index' }); },
+  goArrange() { wx.navigateTo({ url: '/pages/arrange/index' }); },
   goMerge() { wx.navigateTo({ url: '/pages/merge/index' }); },
   goSplit() { wx.navigateTo({ url: '/pages/split/index' }); },
-  goReorder() { wx.navigateTo({ url: '/pages/reorder/index' }); },
+  goReorder() { wx.navigateTo({ url: '/pages/pagesmanage/index' }); },
   todo() { wx.showToast({ icon: 'none', title: '即将上线，敬请期待' }); }
 });
 

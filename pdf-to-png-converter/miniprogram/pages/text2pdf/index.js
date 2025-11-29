@@ -9,9 +9,8 @@ Page({
     fileSize: 0,
     fileSizeFormatted: '0 KB',
     
-    // 配置参数
-    fontSize: 12,
-    lineSpacing: 1.5,
+    // 按钮状态
+    canConvert: false,
     
     // 转换状态
     converting: false,
@@ -35,16 +34,19 @@ Page({
       textContent: '',
       fileName: '',
       fileSize: 0,
-      converted: false
+      converted: false,
+      canConvert: false
     });
   },
 
   // 输入文本
   onTextInput: function(e) {
     const text = e.detail.value;
+    const canConvert = text.trim().length > 0;
     this.setData({
       textContent: text,
-      converted: false
+      converted: false,
+      canConvert: canConvert
     });
   },
 
@@ -81,7 +83,8 @@ Page({
           fileSize: file.size,
           fileSizeFormatted: that.formatFileSize(file.size),
           textContent: file.path,
-          converted: false
+          converted: false,
+          canConvert: true
         });
       },
       fail: function() {
@@ -90,20 +93,6 @@ Page({
           icon: 'none'
         });
       }
-    });
-  },
-
-  // 字体大小调整
-  onFontSizeChange: function(e) {
-    this.setData({
-      fontSize: parseInt(e.detail.value)
-    });
-  },
-
-  // 行间距调整
-  onLineSpacingChange: function(e) {
-    this.setData({
-      lineSpacing: parseFloat(e.detail.value)
     });
   },
 
@@ -141,11 +130,8 @@ Page({
       mask: true
     });
     
-    // 准备上传数据
-    const formData = {
-      font_size: this.data.fontSize.toString(),
-      line_spacing: this.data.lineSpacing.toString()
-    };
+    // 使用默认参数
+    const formData = {};
     
     if (this.data.inputMode === 'text') {
       // 直接文本转换
@@ -167,9 +153,7 @@ Page({
         'content-type': 'application/x-www-form-urlencoded'
       },
       data: {
-        text: text,
-        font_size: formData.font_size,
-        line_spacing: formData.line_spacing
+        text: text
       },
       success: function(res) {
         if (res.statusCode === 200 && res.data.url) {
@@ -321,7 +305,8 @@ Page({
       fileName: '',
       fileSize: 0,
       converted: false,
-      resultFile: null
+      resultFile: null,
+      canConvert: false
     });
   }
 });

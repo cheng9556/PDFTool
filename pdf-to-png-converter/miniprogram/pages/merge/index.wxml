@@ -1,17 +1,153 @@
-<view class="wrap">
-  <view class="panel">
-    <view class="h1">PDF合并</view>
-    <button bindtap="addPdf">添加PDF（可多次）</button>
-    <view class="list" wx:if="{{files.length}}">
-      <block wx:for="{{files}}" wx:key="index">
-        <view class="row">{{item.name}}</view>
-      </block>
+<!--pages/merge/index.wxml-->
+<view class="container">
+  <view class="section">
+    <view class="title">PDF文件合并</view>
+    <view class="desc">多个PDF文件合并为一个，支持选择特定页码</view>
+    
+    <!-- 文件选择 -->
+    <view wx:if="{{pdfFiles.length === 0 && !mergeResult}}" class="upload-area" bindtap="choosePDF">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持选择多个文件，最多{{maxFiles}}个，合计{{maxPages}}页，总大小{{maxSize}}MB</view>
+    </view>
+
+    <!-- 已选文件信息 -->
+    <view wx:if="{{pdfFiles.length > 0 && !mergeResult}}" class="files-section">
+      <!-- 统计信息 -->
+      <view class="stats-info">
+        <text>已选择 {{pdfFiles.length}} 个文件</text>
+        <text class="dot">•</text>
+        <text>共 {{totalPages}} 页</text>
+        <text class="dot">•</text>
+        <text>{{formatTotalSize()}}</text>
+      </view>
+
+      <!-- 文件列表 -->
+      <view class="file-list">
+        <view class="file-item" wx:for="{{pdfFiles}}" wx:key="index">
+          <!-- 文件头部 -->
+          <view class="file-header" bindtap="toggleFileExpand" data-index="{{index}}">
+            <view class="file-info">
+              <text class="file-name">📄 {{item.name}}</text>
+              <text class="file-meta">
+                {{item.sizeFormatted}}
+                <text wx:if="{{!item.loading}}"> • {{item.pageCount}}页</text>
+                <text wx:if="{{item.loading}}"> • 加载中...</text>
+              </text>
+            </view>
+            <view class="file-actions">
+              <view class="expand-icon {{expandedFile === index ? 'expanded' : ''}}">▼</view>
+            </view>
+          </view>
+
+          <!-- 展开的详情 -->
+          <view wx:if="{{expandedFile === index}}" class="file-details">
+            <!-- 页码选择 -->
+            <view class="input-group">
+              <text class="input-label">选择页码</text>
+              <view class="page-selector">
+                <input 
+                  class="input-field" 
+                  type="text" 
+                  value="{{item.selectedPages}}"
+                  placeholder="all 或 1-5,7,9-10"
+                  data-index="{{index}}"
+                  bindinput="onPagesInput"
+                />
+                <button 
+                  class="btn-small" 
+                  data-index="{{index}}" 
+                  bindtap="selectAllPages"
+                >全部</button>
+              </view>
+              <view class="mode-hint">例如：all 表示全部页，1-5 表示第1到5页，1-5,7,9-10 表示组合选择</view>
+            </view>
+
+            <!-- 操作按钮 -->
+            <view class="file-operations">
+              <button 
+                class="op-btn" 
+                data-index="{{index}}" 
+                bindtap="moveUp"
+                disabled="{{index === 0}}"
+              >↑ 上移</button>
+              <button 
+                class="op-btn" 
+                data-index="{{index}}" 
+                bindtap="moveDown"
+                disabled="{{index === pdfFiles.length - 1}}"
+              >↓ 下移</button>
+              <button 
+                class="op-btn delete" 
+                data-index="{{index}}" 
+                bindtap="deleteFile"
+              >删除</button>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 添加文件按钮 -->
+      <button 
+        wx:if="{{pdfFiles.length < maxFiles}}"
+        class="add-file-btn" 
+        bindtap="choosePDF"
+      >
+        ➕ 添加文件
+      </button>
+
+      <!-- 合并按钮 -->
+      <button 
+        class="merge-btn"
+        bindtap="startMerge"
+        disabled="{{merging || pdfFiles.length < 2 || totalPages > maxPages}}"
+        loading="{{merging}}"
+      >
+        {{merging ? '合并中...' : '开始合并'}}
+      </button>
+
+      <!-- 页数超限提示 -->
+      <view wx:if="{{totalPages > maxPages}}" class="error-tip">
+        ⚠️ 总页数({{totalPages}})超过{{maxPages}}页限制，请减少页数
+      </view>
+    </view>
+
+    <!-- 合并结果 -->
+    <view wx:if="{{mergeResult}}" class="result">
+      <view class="result-header">
+        <view class="success-icon">✓</view>
+        <view class="success-text">合并成功！</view>
+        <view class="result-stats">
+          <text>合并 {{mergeResult.file_count}} 个文件</text>
+          <text class="dot">•</text>
+          <text>{{mergeResult.total_pages}} 页</text>
+          <text class="dot">•</text>
+          <text>耗时 {{mergeResult.processing_time}}秒</text>
+        </view>
+      </view>
+      
+      <view class="result-file">
+        <view class="file-item-info">
+          <view class="file-item-name">📄 {{mergeResult.filename}}</view>
+          <view class="file-item-meta">
+            <text>{{mergeResult.file_size_mb}} MB</text>
+          </view>
+        </view>
+        <view 
+          class="file-item-btn"
+          bindtap="downloadMerged"
+        >
+          下载
+        </view>
+      </view>
+      
+      <button class="download-all-btn" bindtap="downloadMerged">
+        下载合并文件
+      </button>
+      
+      <view class="reset-btn" bindtap="resetMerge">
+        重新合并
+      </view>
     </view>
   </view>
-  <view class="footer">
-    <view>已选择 {{files.length}} 个文件</view>
-    <button type="primary" bindtap="startMerge" disabled="{{!files.length}}">开始合并</button>
-  </view>
 </view>
-
-

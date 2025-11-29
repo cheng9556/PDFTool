@@ -1,0 +1,128 @@
+<view class="container">
+  <view class="section">
+    <view class="title">PDF页面管理</view>
+    <view class="desc">删除页面、调整顺序、插入图片</view>
+    
+    <!-- 文件选择 -->
+    <view wx:if="{{!fileName}}" class="upload-area" bindtap="choosePdf">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持PDF格式，最大50MB</view>
+    </view>
+    
+    <!-- 已选文件信息 -->
+    <view wx:if="{{fileName}}" class="file-info">
+      <view class="file-details">
+        <text class="file-name">📄 {{fileName}}</text>
+        <text class="file-size">{{fileSizeFormatted}}<text wx:if="{{totalPages > 0}}"> • 共{{totalPages}}页</text></text>
+      </view>
+      <view class="file-change" bindtap="resetFile">更换</view>
+    </view>
+    
+    <!-- 页面预览和管理 -->
+    <view wx:if="{{fileName && !manageComplete}}" class="pages-section">
+      <!-- 页面缩略图列表 -->
+      <view class="pages-grid">
+        <!-- 显示当前页的页面 -->
+        <block wx:for="{{displayPages}}" wx:key="pageNumber" wx:for-item="page" wx:for-index="displayIndex">
+          <!-- 插入的图片（显示在当前页面前面，紧邻原页面） -->
+          <view 
+            wx:for="{{insertImages}}"
+            wx:key="index"
+            wx:for-item="img"
+            wx:if="{{img.position === page.pageNumber}}"
+            class="page-item insert-preview"
+          >
+            <image class="page-thumbnail" src="{{img.imagePath}}" mode="aspectFit"></image>
+            <view class="page-number">插入: {{img.position}}</view>
+            <view class="page-action delete" catchtap="deleteInsertImage" data-index="{{index}}">×</view>
+          </view>
+          
+          <!-- 页面项（紧邻插入的图片） -->
+          <view class="page-item">
+            <image class="page-thumbnail" src="{{page.thumbnail}}" mode="aspectFit"></image>
+            <view class="page-number">{{page.pageNumber}}</view>
+            <view class="page-actions">
+              <view class="page-action" catchtap="movePageUp" data-index="{{displayIndex}}" wx:if="{{page.pageNumber > 1}}">↑</view>
+              <view class="page-action" catchtap="movePageDown" data-index="{{displayIndex}}" wx:if="{{page.pageNumber < pages.length}}">↓</view>
+              <view class="page-action insert" catchtap="insertImageAtPosition" data-position="{{page.pageNumber}}">+</view>
+              <view class="page-action delete" catchtap="deleteSinglePage" data-index="{{displayIndex}}">×</view>
+            </view>
+          </view>
+        </block>
+        
+        <!-- 末尾插入按钮（只在最后一页显示） -->
+        <view 
+          wx:if="{{currentPage === totalPageCount || totalPageCount === 0}}"
+          class="page-item insert-btn"
+          bindtap="chooseInsertImage"
+          data-position="{{pages.length + 1}}"
+        >
+          <view class="insert-icon">+</view>
+          <view class="page-number">末尾插入</view>
+        </view>
+      </view>
+      
+      <!-- 分页控件（超过10页时显示） -->
+      <view wx:if="{{totalPages > 10 && totalPageCount > 1}}" class="pagination">
+        <view 
+          class="page-btn {{currentPage === 1 ? 'disabled' : ''}}"
+          bindtap="goToPrevPage"
+        >
+          上一页
+        </view>
+        <view class="page-info">
+          <text>{{currentPage}} / {{totalPageCount}}</text>
+        </view>
+        <view 
+          class="page-btn {{currentPage === totalPageCount ? 'disabled' : ''}}"
+          bindtap="goToNextPage"
+        >
+          下一页
+        </view>
+      </view>
+        
+        <!-- 处理按钮 -->
+      <button 
+        class="manage-btn"
+        bindtap="startManage"
+        disabled="{{managing}}"
+        loading="{{managing}}"
+      >
+        {{managing ? '处理中...' : '开始处理'}}
+      </button>
+    </view>
+    
+    <!-- 处理结果 -->
+    <view wx:if="{{manageComplete}}" class="result">
+      <view class="result-header">
+        <view class="success-icon">✓</view>
+        <view class="success-text">处理成功！</view>
+        <view class="result-stats">
+          <text>原文件 {{manageResult.original_pages}} 页</text>
+          <text class="dot">•</text>
+          <text>处理后 {{manageResult.final_pages}} 页</text>
+          <text class="dot">•</text>
+          <text>耗时 {{manageResult.processing_time}}秒</text>
+        </view>
+      </view>
+      
+      <view class="result-file">
+        <view class="file-item-info">
+          <view class="file-item-name">📄 {{manageResult.filename}}</view>
+          <view class="file-item-meta">
+            <text>{{manageResult.file_size_mb}} MB</text>
+          </view>
+        </view>
+      </view>
+      
+      <button class="download-all-btn" bindtap="downloadResult">
+        下载处理后的文件
+      </button>
+      
+      <view class="reset-btn" bindtap="resetFile">
+        重新处理
+      </view>
+    </view>
+  </view>
+</view>

@@ -15,6 +15,8 @@ import base64
 from werkzeug.utils import secure_filename
 from datetime import datetime
 from PIL import Image
+import time
+import traceback
 
 # 配置日志
 logging.basicConfig(
@@ -530,7 +532,7 @@ def convert_pdf_to_text(pdf_path, output_path, start_page=0, end_page=None):
 @app.route('/download/<filename>', methods=['GET'])
 def download_file(filename):
     """
-    下载转换后的Word文件
+    下载转换后的文件（支持Word和PDF）
     """
     try:
         file_path = os.path.join(app.config['CONVERTED_FOLDER'], secure_filename(filename))
@@ -540,15 +542,384 @@ def download_file(filename):
         
         logger.info(f"下载文件: {filename}")
         
+        # 根据文件扩展名设置MIME类型
+        file_ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+        mimetype_map = {
+            'pdf': 'application/pdf',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'doc': 'application/msword',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'xls': 'application/vnd.ms-excel'
+        }
+        mimetype = mimetype_map.get(file_ext, 'application/octet-stream')
+        
         return send_file(
             file_path,
             as_attachment=True,
             download_name=filename,
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            mimetype=mimetype
         )
     except Exception as e:
         logger.error(f"下载文件失败: {str(e)}")
         return jsonify({'error': f'下载失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/compress', methods=['POST'])
+def compress_pdf():
+    """
+    PDF压缩接口
+    支持三种压缩级别：low(20%), medium(50%), high(80%)
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '未找到文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '未选择文件'}), 400
+        
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({'error': '只支持PDF文件'}), 400
+        
+        # 获取压缩级别
+        compression_level = request.form.get('compression_level', 'medium').lower()
+        if compression_level not in ['low', 'medium', 'high']:
+            compression_level = 'medium'
+        
+        # 压缩级别配置
+        compression_configs = {
+            'low': {
+                'image_quality': 90,      # 图片质量90%
+                'image_dpi': 200,         # 图片DPI 200
+                'garbage': 2,             # 轻度清理
+                'deflate': True,          # 启用压缩
+                'clean': True             # 清理交叉引用
+            },
+            'medium': {
+                'image_quality': 75,      # 图片质量75%
+                'image_dpi': 150,         # 图片DPI 150
+                'garbage': 3,             # 中度清理
+                'deflate': True,
+                'clean': True
+            },
+            'high': {
+                'image_quality': 60,      # 图片质量60%
+                'image_dpi': 100,         # 图片DPI 100
+                'garbage': 4,             # 深度清理
+                'deflate': True,
+                'clean': True
+            }
+        }
+        
+        config = compression_configs[compression_level]
+        
+        # 保存上传的文件
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex[:8]}_{filename}")
+        file.save(temp_path)
+        
+        start_time = time.time()
+        original_size = os.path.getsize(temp_path)
+        
+        logger.info(f"开始压缩PDF: {filename}, 原始大小: {original_size / 1024:.1f}KB, 压缩级别: {compression_level}")
+        
+        # 打开PDF
+        doc = fitz.open(temp_path)
+        total_pages = len(doc)
+        
+        # 压缩图片：遍历所有图片并压缩
+        image_count = 0
+        total_images = 0
+        
+        for page_num in range(total_pages):
+            page = doc[page_num]
+            image_list = page.get_images()
+            total_images += len(image_list)
+            
+            for img_index, img in enumerate(image_list):
+                try:
+                    xref = img[0]
+                    base_image = doc.extract_image(xref)
+                    image_bytes = base_image["image"]
+                    image_ext = base_image["ext"]
+                    
+                    # 只处理JPEG和PNG图片
+                    if image_ext.lower() not in ['jpeg', 'jpg', 'png']:
+                        continue
+                    
+                    # 使用PIL压缩图片
+                    img_pil = Image.open(io.BytesIO(image_bytes))
+                    img_original_size = len(image_bytes)
+                    
+                    # 如果是PNG，转换为JPEG以减小文件大小
+                    convert_to_jpeg = False
+                    if image_ext.lower() == 'png':
+                        if img_pil.mode in ['RGBA', 'LA']:
+                            # 创建白色背景
+                            background = Image.new('RGB', img_pil.size, (255, 255, 255))
+                            if img_pil.mode == 'RGBA':
+                                background.paste(img_pil, mask=img_pil.split()[3])
+                            else:
+                                background.paste(img_pil)
+                            img_pil = background
+                            convert_to_jpeg = True
+                        elif compression_level == 'high':
+                            # 高压缩级别时，所有PNG都转JPEG
+                            convert_to_jpeg = True
+                    
+                    # 计算目标尺寸（基于DPI）
+                    scale_factor = config['image_dpi'] / 72.0
+                    if scale_factor < 1.0:
+                        new_width = int(img_pil.width * scale_factor)
+                        new_height = int(img_pil.height * scale_factor)
+                        if new_width > 0 and new_height > 0:
+                            img_pil = img_pil.resize((new_width, new_height), Image.Resampling.LANCZOS)
+                    
+                    # 压缩图片
+                    img_buffer = io.BytesIO()
+                    if convert_to_jpeg or image_ext.lower() in ['jpeg', 'jpg']:
+                        img_pil.save(img_buffer, format='JPEG', quality=config['image_quality'], optimize=True)
+                    else:
+                        # PNG优化
+                        img_pil.save(img_buffer, format='PNG', optimize=True)
+                    
+                    compressed_bytes = img_buffer.getvalue()
+                    compressed_size = len(compressed_bytes)
+                    
+                    # 如果压缩后更小，则替换原图片
+                    if compressed_size < img_original_size * 0.95:  # 至少减少5%才替换
+                        # 获取图片位置信息
+                        img_rects = page.get_image_rects(xref)
+                        if img_rects:
+                            img_rect = img_rects[0]
+                            
+                            # 删除原图片
+                            try:
+                                page.delete_image(xref)
+                            except:
+                                pass
+                            
+                            # 插入压缩后的图片
+                            page.insert_image(img_rect, stream=compressed_bytes)
+                            image_count += 1
+                            
+                except Exception as e:
+                    logger.warning(f"压缩页面 {page_num + 1} 的图片 {img_index} 失败: {str(e)}")
+                    continue
+        
+        # 生成输出文件名
+        output_filename = f"compressed_{compression_level}_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+        
+        # 保存压缩后的PDF
+        doc.save(output_path,
+                 garbage=config['garbage'],
+                 deflate=config['deflate'],
+                 clean=config['clean'])  # 新版本PyMuPDF不再支持linear参数
+        
+        doc.close()
+        
+        # 删除临时文件
+        try:
+            os.remove(temp_path)
+        except:
+            pass
+        
+        # 计算压缩结果
+        compressed_size = os.path.getsize(output_path)
+        compression_ratio = (1 - compressed_size / original_size) * 100
+        elapsed_time = time.time() - start_time
+        
+        logger.info(f"PDF压缩完成: {output_filename}, 原始: {original_size / 1024:.1f}KB, "
+                   f"压缩后: {compressed_size / 1024:.1f}KB, 压缩率: {compression_ratio:.1f}%, "
+                   f"处理图片: {image_count}, 耗时: {elapsed_time:.2f}秒")
+        
+        return jsonify({
+            'success': True,
+            'filename': output_filename,
+            'url': f'/download/{output_filename}',
+            'original_size': original_size,
+            'compressed_size': compressed_size,
+            'compression_ratio': round(compression_ratio, 1),
+            'compression_level': compression_level,
+            'image_count': image_count,
+            'total_pages': total_pages,
+            'elapsed_time': round(elapsed_time, 2)
+        })
+        
+    except Exception as e:
+        logger.error(f"PDF压缩失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'压缩失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/arrange/upload', methods=['POST'])
+def arrange_upload_pdf():
+    """
+    上传PDF文件用于编排（支持多文件）
+    返回文件ID和页面信息
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '未找到文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '未选择文件'}), 400
+        
+        if not file.filename.lower().endswith('.pdf'):
+            return jsonify({'error': '只支持PDF文件'}), 400
+        
+        # 保存文件
+        filename = secure_filename(file.filename)
+        file_id = uuid.uuid4().hex[:8]
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"arrange_{file_id}_{filename}")
+        file.save(temp_path)
+        
+        # 打开PDF获取页面信息
+        doc = fitz.open(temp_path)
+        total_pages = len(doc)
+        
+        # 生成每页缩略图
+        thumbnails = []
+        for page_num in range(total_pages):
+            page = doc[page_num]
+            # 生成缩略图（150x150像素）
+            mat = fitz.Matrix(150 / page.rect.width, 150 / page.rect.height)
+            pix = page.get_pixmap(matrix=mat)
+            img_data = pix.tobytes("png")
+            img_base64 = base64.b64encode(img_data).decode('utf-8')
+            thumbnails.append({
+                'page_number': page_num + 1,
+                'thumbnail': f'data:image/png;base64,{img_base64}',
+                'width': page.rect.width,
+                'height': page.rect.height
+            })
+        
+        doc.close()
+        
+        file_size = os.path.getsize(temp_path)
+        
+        logger.info(f"上传PDF用于编排: {filename}, 文件ID: {file_id}, 页数: {total_pages}")
+        
+        return jsonify({
+            'success': True,
+            'file_id': file_id,
+            'filename': filename,
+            'file_size': file_size,
+            'total_pages': total_pages,
+            'thumbnails': thumbnails
+        })
+        
+    except Exception as e:
+        logger.error(f"上传PDF失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'上传失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/arrange/generate', methods=['POST'])
+def arrange_generate_pdf():
+    """
+    根据用户选择的页面顺序生成编排后的PDF
+    参数: files (JSON数组，每个元素包含file_id和pages数组)
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': '缺少必要参数'}), 400
+        
+        # 接收页面顺序数组：[{file_id: 'xxx', page_number: 1}, ...]
+        pages_order = data.get('pages_order', [])
+        
+        # 兼容旧格式：files数组
+        if not pages_order and 'files' in data:
+            files_config = data['files']
+            # 转换为pages_order格式
+            pages_order = []
+            for file_config in files_config:
+                file_id = file_config.get('file_id')
+                pages = file_config.get('pages', [])
+                for page_num in pages:
+                    pages_order.append({
+                        'file_id': file_id,
+                        'page_number': page_num
+                    })
+        
+        if not pages_order or len(pages_order) == 0:
+            return jsonify({'error': '未选择任何页面'}), 400
+        
+        start_time = time.time()
+        
+        # 创建新的PDF文档
+        output_doc = fitz.open()
+        
+        total_pages_added = 0
+        
+        # 按用户选择的顺序添加页面
+        file_cache = {}  # 缓存已打开的文档
+        
+        for page_info in pages_order:
+            file_id = page_info.get('file_id')
+            page_number = page_info.get('page_number')
+            
+            if not file_id or not page_number:
+                continue
+            
+            # 从缓存获取或打开PDF文件
+            if file_id not in file_cache:
+                upload_folder = app.config['UPLOAD_FOLDER']
+                pdf_files = [f for f in os.listdir(upload_folder) if f.startswith(f'arrange_{file_id}_')]
+                
+                if not pdf_files:
+                    logger.warning(f"未找到文件ID对应的PDF: {file_id}")
+                    continue
+                
+                pdf_path = os.path.join(upload_folder, pdf_files[0])
+                file_cache[file_id] = fitz.open(pdf_path)
+            
+            source_doc = file_cache[file_id]
+            
+            # 添加指定页面
+            if 1 <= page_number <= len(source_doc):
+                page_idx = page_number - 1
+                # 复制页面到新文档
+                output_doc.insert_pdf(source_doc, from_page=page_idx, to_page=page_idx)
+                total_pages_added += 1
+        
+        # 关闭所有打开的文档
+        for doc in file_cache.values():
+            doc.close()
+        
+        if total_pages_added == 0:
+            output_doc.close()
+            return jsonify({'error': '未添加任何页面'}), 400
+        
+        # 生成输出文件名
+        output_filename = f"arranged_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+        
+        # 保存PDF
+        output_doc.save(output_path, garbage=4, deflate=True, clean=True)
+        output_doc.close()
+        
+        output_size = os.path.getsize(output_path)
+        elapsed_time = time.time() - start_time
+        
+        logger.info(f"PDF编排完成: {output_filename}, 总页数: {total_pages_added}, 耗时: {elapsed_time:.2f}秒")
+        
+        return jsonify({
+            'success': True,
+            'filename': output_filename,
+            'url': f'/download/{output_filename}',
+            'total_pages': total_pages_added,
+            'file_size': output_size,
+            'elapsed_time': round(elapsed_time, 2)
+        })
+        
+    except Exception as e:
+        logger.error(f"PDF编排失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'编排失败: {str(e)}'}), 500
 
 
 @app.errorhandler(413)

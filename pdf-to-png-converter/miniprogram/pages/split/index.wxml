@@ -1,12 +1,154 @@
-<view class="wrap">
-  <view class="panel">
-    <view class="h1">文件拆分</view>
-    <view class="uploader" bindtap="choosePdf">点击选择PDF文件</view>
-  </view>
-  <view class="footer">
-    <view>{{filename || '未选择文件'}}</view>
-    <button type="primary" bindtap="submit" disabled="{{!tempFilePath}}">开始拆分</button>
+<view class="container">
+  <view class="section">
+    <view class="title">PDF文件拆分</view>
+    <view class="desc">将PDF文件拆分为多个小文件</view>
+    
+    <!-- 文件选择 -->
+    <view wx:if="{{!fileName}}" class="upload-area" bindtap="choosePdf">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持PDF格式，最大100MB</view>
+    </view>
+    
+    <!-- 已选文件信息 -->
+    <view wx:if="{{fileName}}" class="file-info">
+      <view class="file-details">
+        <text class="file-name">📄 {{fileName}}</text>
+        <text class="file-size">{{fileSizeFormatted}}<text wx:if="{{totalPages > 0}}"> • 共{{totalPages}}页</text></text>
+      </view>
+      <view class="file-change" bindtap="resetFile">更换</view>
+    </view>
+    
+    <!-- 拆分模式选择 -->
+    <view wx:if="{{fileName}}" class="split-modes">
+      <view class="modes-title">选择拆分方式</view>
+      
+      <view class="mode-tabs">
+        <view 
+          class="mode-tab {{splitMode === 'by_pages' ? 'active' : ''}}"
+          bindtap="switchMode"
+          data-mode="by_pages"
+        >
+          按页数
+        </view>
+        <view 
+          class="mode-tab {{splitMode === 'by_count' ? 'active' : ''}}"
+          bindtap="switchMode"
+          data-mode="by_count"
+        >
+          按份数
+        </view>
+        <view 
+          class="mode-tab {{splitMode === 'by_ranges' ? 'active' : ''}}"
+          bindtap="switchMode"
+          data-mode="by_ranges"
+        >
+          自定义
+        </view>
+      </view>
+      
+      <!-- 按页数拆分 -->
+      <view wx:if="{{splitMode === 'by_pages'}}" class="mode-content">
+        <view class="input-group">
+          <text class="input-label">每个文件页数</text>
+          <input 
+            class="input-field" 
+            type="number" 
+            value="{{pagesPerFile}}"
+            bindinput="onPagesChange"
+            placeholder="输入每个文件的页数"
+          />
+        </view>
+        <view class="mode-hint">例如：输入5表示每5页生成一个文件</view>
+      </view>
+      
+      <!-- 按份数拆分 -->
+      <view wx:if="{{splitMode === 'by_count'}}" class="mode-content">
+        <view class="input-group">
+          <text class="input-label">拆分成几个文件</text>
+          <input 
+            class="input-field" 
+            type="number" 
+            value="{{fileCount}}"
+            bindinput="onCountChange"
+            placeholder="输入拆分份数"
+          />
+        </view>
+        <view class="mode-hint">例如：输入3表示平均分成3个文件</view>
+      </view>
+      
+      <!-- 自定义范围拆分 -->
+      <view wx:if="{{splitMode === 'by_ranges'}}" class="mode-content">
+        <view class="input-group">
+          <text class="input-label">页码范围</text>
+          <textarea 
+            class="textarea-field" 
+            value="{{ranges}}"
+            bindinput="onRangesInput"
+            placeholder="{{rangesPlaceholder}}"
+            auto-height
+          />
+        </view>
+        <view class="mode-hint">输入页码范围，用逗号分隔。例如：1-5,6-10,11-15</view>
+      </view>
+    </view>
+    
+    <!-- 拆分按钮 -->
+    <button 
+      wx:if="{{fileName && !splitComplete}}"
+      class="split-btn"
+      bindtap="startSplit"
+      disabled="{{splitting}}"
+      loading="{{splitting}}"
+    >
+      {{splitting ? '拆分中...' : '开始拆分'}}
+    </button>
+    
+    <!-- 拆分结果 -->
+    <view wx:if="{{splitComplete}}" class="result">
+      <view class="result-header">
+        <view class="success-icon">✓</view>
+        <view class="success-text">拆分成功！</view>
+        <view class="result-stats">
+          <text>原文件 {{totalPages}} 页</text>
+          <text class="dot">•</text>
+          <text>生成 {{splitCount}} 个文件</text>
+          <text class="dot">•</text>
+          <text>耗时 {{conversionTime}}</text>
+        </view>
+      </view>
+      
+      <view class="files-list">
+        <view 
+          wx:for="{{splitFiles}}" 
+          wx:key="filename"
+          class="file-item"
+        >
+          <view class="file-item-info">
+            <view class="file-item-name">📄 {{item.filename}}</view>
+            <view class="file-item-meta">
+              <text>页面: {{item.page_range}}</text>
+              <text class="dot">•</text>
+              <text>{{item.sizeFormatted}} KB</text>
+            </view>
+          </view>
+          <view 
+            class="file-item-btn"
+            bindtap="downloadFile"
+            data-index="{{index}}"
+          >
+            下载
+          </view>
+        </view>
+      </view>
+      
+      <button class="download-all-btn" bindtap="downloadAll">
+        批量下载全部文件
+      </button>
+      
+      <view class="reset-btn" bindtap="resetFile">
+        重新拆分
+      </view>
+    </view>
   </view>
 </view>
-
-

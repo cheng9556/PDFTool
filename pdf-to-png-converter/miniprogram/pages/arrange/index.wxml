@@ -1,0 +1,144 @@
+<view class="container">
+  <view class="section">
+    <view class="title">PDF页面编排</view>
+    <view class="desc">选择多个PDF文件，自由编排页面顺序</view>
+    
+    <!-- 文件上传区域 -->
+    <view wx:if="{{pdfFiles.length === 0 && !processComplete}}" class="upload-area" bindtap="choosePdf">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持选择多个文件，最多10个</view>
+    </view>
+    
+    <!-- 已上传文件列表和页面选择 -->
+    <view wx:if="{{pdfFiles.length > 0 && !processComplete}}" class="files-section">
+      <!-- 添加文件按钮 -->
+      <view class="add-file-btn" bindtap="choosePdf">
+        <text class="add-icon">+</text>
+        <text>追加文件</text>
+      </view>
+      
+      <!-- 文件列表 -->
+      <view class="file-list">
+        <view wx:for="{{pdfFiles}}" wx:key="file_id" wx:for-item="pdfFile" wx:for-index="fileIndex" class="file-item">
+          <view class="file-header">
+            <view class="file-info">
+              <text class="file-name">📄 {{pdfFile.filename}}</text>
+              <text class="file-meta">{{pdfFile.total_pages}}页</text>
+            </view>
+            <view class="file-actions">
+              <view class="delete-btn" bindtap="deleteFile" data-file-index="{{fileIndex}}">删除</view>
+            </view>
+          </view>
+          
+          <!-- 页面网格 -->
+          <view class="pages-grid">
+            <view 
+              wx:for="{{pdfFile.thumbnails}}" 
+              wx:key="page_number" 
+              wx:for-item="thumb" 
+              wx:for-index="thumbIndex"
+              class="page-item {{thumb.selected ? 'selected' : ''}}"
+              bindtap="selectPage"
+              data-file-index="{{fileIndex}}"
+              data-page-number="{{thumb.page_number}}"
+            >
+              <view class="page-thumbnail-wrapper">
+                <image class="page-thumbnail" src="{{thumb.thumbnail}}" mode="aspectFit"></image>
+                <view wx:if="{{thumb.selected}}" class="selected-badge">✓</view>
+              </view>
+              <view class="page-number">第{{thumb.page_number}}页</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+    
+    <!-- 右侧已选择页面预览 -->
+    <view wx:if="{{pdfFiles.length > 0 && selectedPages.length > 0 && !processComplete}}" class="selected-section">
+      <view class="selected-header">
+        <text class="selected-title">已选择页面 ({{selectedPages.length}})</text>
+        <text class="selected-hint">点击页面可取消选择</text>
+      </view>
+      
+      <view class="selected-pages">
+        <view 
+          wx:for="{{selectedPages}}" 
+          wx:key="new_page_number" 
+          wx:for-item="page" 
+          wx:for-index="pageIndex"
+          class="selected-page-item"
+        >
+          <view class="selected-page-content">
+            <view class="selected-page-thumbnail-wrapper">
+              <image class="selected-page-thumbnail" src="{{page.thumbnail}}" mode="aspectFit"></image>
+              <view class="new-page-number">{{page.new_page_number}}</view>
+            </view>
+            <view class="selected-page-info">
+              <text class="selected-page-filename">{{page.filename}}</text>
+              <text class="selected-page-original">原第{{page.page_number}}页</text>
+            </view>
+          </view>
+          
+          <!-- 移动按钮 -->
+          <view class="page-actions">
+            <view 
+              class="move-btn {{pageIndex === 0 ? 'disabled' : ''}}"
+              bindtap="movePageUp"
+              data-index="{{pageIndex}}"
+            >
+              ↑
+            </view>
+            <view 
+              class="move-btn {{pageIndex === selectedPages.length - 1 ? 'disabled' : ''}}"
+              bindtap="movePageDown"
+              data-index="{{pageIndex}}"
+            >
+              ↓
+            </view>
+            <view class="remove-btn" bindtap="removeSelectedPage" data-index="{{pageIndex}}">×</view>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 生成按钮 -->
+      <button 
+        class="generate-btn"
+        bindtap="generatePdf"
+        disabled="{{processing}}"
+        loading="{{processing}}"
+      >
+        {{processing ? '生成中...' : '生成编排后的PDF'}}
+      </button>
+    </view>
+    
+    <!-- 处理结果 -->
+    <view wx:if="{{processComplete}}" class="result">
+      <view class="result-header">
+        <view class="success-icon">✓</view>
+        <view class="success-text">编排成功！</view>
+        <view class="result-stats">
+          <text>总页数: {{processResult.total_pages}}</text>
+          <text class="dot">•</text>
+          <text>耗时: {{processResult.elapsed_time}}秒</text>
+        </view>
+      </view>
+      
+      <view class="result-file">
+        <view class="file-item-info">
+          <view class="file-item-name">📄 {{processResult.filename}}</view>
+          <view class="file-item-meta">{{processResult.file_size_formatted}}</view>
+        </view>
+      </view>
+      
+      <button class="download-all-btn" bindtap="downloadResult">
+        下载编排后的文件
+      </button>
+      
+      <view class="reset-btn" bindtap="reset">
+        重新编排
+      </view>
+    </view>
+  </view>
+</view>
+

@@ -1,0 +1,106 @@
+<view class="container">
+  <view class="section">
+    <view class="title">PDF压缩</view>
+    <view class="desc">选择压缩级别，减小PDF文件大小</view>
+    
+    <!-- 文件选择 -->
+    <view wx:if="{{!fileName}}" class="upload-area" bindtap="choosePdf">
+      <image class="upload-icon" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzFhNmRmZiI+PHBhdGggZD0iTTE5LjM1IDEwLjA0QzE4LjY3IDYuNTkgMTUuNjQgNCAxMiA0IDkuMTEgNCA2LjYgNS42NCA1LjM1IDguMDQgMi4zNCA4LjM2IDAgMTAuOTEgMCAxNGMwIDMuMzEgMi42OSA2IDYgNmgxM2MyLjc2IDAgNS0yLjI0IDUtNSAwLTIuNjQtMi4wNS00Ljc4LTQuNjUtNC45NnpNMTQgMTN2NGgtNHYtNEg3bDUtNSA1IDVoLTN6Ii8+PC9zdmc+"></image>
+      <view class="upload-text">点击选择PDF文件</view>
+      <view class="upload-hint">支持PDF格式，最大100MB</view>
+    </view>
+    
+    <!-- 已选文件信息 -->
+    <view wx:if="{{fileName && !processComplete}}" class="file-info">
+      <view class="file-details">
+        <text class="file-name">📄 {{fileName}}</text>
+        <text class="file-size">{{fileSizeFormatted}}</text>
+      </view>
+      <view class="file-change" bindtap="resetFile">更换</view>
+    </view>
+    
+    <!-- 压缩级别选择 -->
+    <view wx:if="{{fileName && !processComplete}}" class="compression-section">
+      <view class="compression-title">选择压缩级别</view>
+      <view class="compression-levels">
+        <view 
+          wx:for="{{compressionLevels}}" 
+          wx:key="value"
+          class="level-item {{selectedLevel === item.value ? 'selected' : ''}}"
+          bindtap="selectLevel"
+          data-level="{{item.value}}"
+        >
+          <view class="level-radio">
+            <view wx:if="{{selectedLevel === item.value}}" class="radio-dot"></view>
+          </view>
+          <view class="level-info">
+            <view class="level-label">{{item.label}}</view>
+            <view class="level-desc">{{item.desc}}</view>
+          </view>
+          <view class="level-ratio">{{item.ratio}}</view>
+        </view>
+      </view>
+      
+      <!-- 压缩按钮 -->
+      <button 
+        class="compress-btn"
+        bindtap="startCompress"
+        disabled="{{processing}}"
+        loading="{{processing}}"
+      >
+        {{processing ? '压缩中...' : '开始压缩'}}
+      </button>
+    </view>
+    
+    <!-- 处理结果 -->
+    <view wx:if="{{processComplete}}" class="result">
+      <view class="result-header">
+        <view class="success-icon">✓</view>
+        <view class="success-text">压缩成功！</view>
+        <view class="result-stats">
+          <text>压缩率 {{processResult.compressionRatio}}%</text>
+          <text class="dot">•</text>
+          <text>耗时 {{processResult.elapsedTime}}秒</text>
+        </view>
+      </view>
+      
+      <view class="result-info">
+        <view class="info-item">
+          <text class="info-label">原始大小：</text>
+          <text class="info-value">{{formatFileSize(processResult.originalSize)}}</text>
+        </view>
+        <view class="info-item">
+          <text class="info-label">压缩后大小：</text>
+          <text class="info-value highlight">{{formatFileSize(processResult.compressedSize)}}</text>
+        </view>
+        <view class="info-item">
+          <text class="info-label">节省空间：</text>
+          <text class="info-value highlight">{{formatFileSize(processResult.originalSize - processResult.compressedSize)}}</text>
+        </view>
+        <view class="info-item">
+          <text class="info-label">压缩级别：</text>
+          <text class="info-value">{{processResult.compressionLevel === 'low' ? '低' : processResult.compressionLevel === 'medium' ? '中' : '高'}}压缩率</text>
+        </view>
+        <view class="info-item" wx:if="{{processResult.imageCount > 0}}">
+          <text class="info-label">处理图片：</text>
+          <text class="info-value">{{processResult.imageCount}}张</text>
+        </view>
+      </view>
+      
+      <view class="result-file">
+        <view class="file-item-info">
+          <view class="file-item-name">📄 {{processResult.filename}}</view>
+        </view>
+      </view>
+      
+      <button class="download-all-btn" bindtap="downloadResult">
+        下载压缩后的文件
+      </button>
+      
+      <view class="reset-btn" bindtap="resetFile">
+        重新压缩
+      </view>
+    </view>
+  </view>
+</view>
+

@@ -146,32 +146,6 @@
   font-size: 32rpx;
 }
 
-/* 参数设置 */
-.settings {
-  margin: 30rpx 0;
-  padding: 20rpx;
-  background: #f9fafb;
-  border-radius: 12rpx;
-}
-
-.setting-item {
-  margin-bottom: 24rpx;
-}
-
-.setting-item:last-child {
-  margin-bottom: 0;
-}
-
-.setting-label {
-  font-size: 26rpx;
-  color: #666;
-  margin-bottom: 12rpx;
-}
-
-.setting-slider {
-  width: 100%;
-}
-
 /* 转换结果 */
 .result {
   margin-top: 30rpx;

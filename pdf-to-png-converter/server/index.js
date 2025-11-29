@@ -959,6 +959,239 @@ app.post('/excel/topdf', upload.single('file'), async (req, res) => {
   }
 });
 
+// PDF get pages: get page count and thumbnails
+app.post('/pdf/get-pages', upload.single('pdf_file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    
+    const id = nanoid(8);
+    const base = resolve('../test-results/miniserver/pdf-get-pages', id);
+    mkdirSync(base, { recursive: true });
+    
+    // Load PDF to get page count
+    const doc = await PDFDocument.load(req.file.buffer);
+    const totalPages = doc.getPageCount();
+    
+    // Generate thumbnails for each page
+    const thumbnails = [];
+    const uint8Array = new Uint8Array(req.file.buffer);
+    const loadingTask = pdfjsLib.getDocument({ data: uint8Array });
+    const pdfDocument = await loadingTask.promise;
+    
+    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+      const page = await pdfDocument.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 0.5 }); // Smaller scale for thumbnails
+      
+      const canvas = createCanvas(viewport.width, viewport.height);
+      const context = canvas.getContext('2d');
+      
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+      
+      // Convert to base64
+      const thumbnailData = canvas.toDataURL('image/png');
+      thumbnails.push({
+        page_number: pageNum,
+        thumbnail: thumbnailData
+      });
+    }
+    
+    res.json({
+      success: true,
+      total_pages: totalPages,
+      thumbnails: thumbnails
+    });
+  } catch (e) {
+    console.error('PDF get pages error:', e);
+    res.status(500).json({ error: (e && e.message) || String(e) });
+  }
+});
+
+// PDF manage pages: delete, reorder, and insert images
+app.post('/pdf/manage-pages', upload.single('pdf_file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    
+    const id = nanoid(8);
+    const base = resolve('../test-results/miniserver/pdf-manage-pages', id);
+    mkdirSync(base, { recursive: true });
+    
+    // Parse form data
+    let deletePages = [];
+    let reorder = [];
+    let insertImages = [];
+    
+    try {
+      if (req.body.delete_pages) {
+        deletePages = JSON.parse(req.body.delete_pages);
+      }
+      if (req.body.reorder) {
+        reorder = JSON.parse(req.body.reorder);
+      }
+      if (req.body.insert_images) {
+        insertImages = JSON.parse(req.body.insert_images);
+      }
+    } catch (parseError) {
+      return res.status(400).json({ error: 'Invalid JSON in form data' });
+    }
+    
+    // Load source PDF
+    const srcDoc = await PDFDocument.load(req.file.buffer);
+    const originalPageCount = srcDoc.getPageCount();
+    
+    // Create new PDF document
+    const outDoc = await PDFDocument.create();
+    
+    // Process delete and reorder
+    let pagesToCopy = [];
+    if (reorder.length > 0) {
+      // Use reorder list (convert to 0-based indices)
+      pagesToCopy = reorder.map(n => n - 1).filter(idx => idx >= 0 && idx < originalPageCount);
+    } else {
+      // Use all pages except deleted ones
+      for (let i = 0; i < originalPageCount; i++) {
+        if (!deletePages.includes(i + 1)) {
+          pagesToCopy.push(i);
+        }
+      }
+    }
+    
+    // Copy pages in order
+    const copiedPages = await outDoc.copyPages(srcDoc, pagesToCopy);
+    
+    // Helper function to insert an image
+    const insertImageToPdf = async (imageData) => {
+      let imageBuffer;
+      
+      // Parse base64 image data
+      if (imageData.startsWith('data:')) {
+        // Extract base64 part (handle both data:image/png;base64, and data:image/jpeg;base64,)
+        const base64Data = imageData.split(',')[1];
+        imageBuffer = Buffer.from(base64Data, 'base64');
+      } else {
+        imageBuffer = Buffer.from(imageData, 'base64');
+      }
+      
+      // Determine image type and embed
+      let image;
+      let dims;
+      
+      // Try PNG first, then JPG
+      try {
+        image = await outDoc.embedPng(imageBuffer);
+        dims = image.scale(1);
+      } catch (pngError) {
+        try {
+          image = await outDoc.embedJpg(imageBuffer);
+          dims = image.scale(1);
+        } catch (jpgError) {
+          console.error('Failed to embed image (PNG and JPG both failed):', pngError.message, jpgError.message);
+          throw new Error('Unsupported image format. Only PNG and JPG are supported.');
+        }
+      }
+      
+      // Create page with image dimensions
+      const page = outDoc.addPage([dims.width, dims.height]);
+      page.drawImage(image, {
+        x: 0,
+        y: 0,
+        width: dims.width,
+        height: dims.height
+      });
+      
+      return true;
+    };
+    
+    // Sort insert images by position (ascending)
+    insertImages.sort((a, b) => a.position - b.position);
+    
+    console.log(`Processing: ${copiedPages.length} pages, ${insertImages.length} images to insert`);
+    if (insertImages.length > 0) {
+      console.log(`Insert image positions:`, insertImages.map(img => img.position));
+    }
+    
+    // Process pages and insert images
+    // Position meaning (based on client-side page numbering after delete):
+    //   position 1 = before first page (copiedPages[0])
+    //   position 2 = before second page (copiedPages[1]), i.e., after copiedPages[0]
+    //   position N+1 = after last page (copiedPages[N-1])
+    
+    const totalPages = copiedPages.length;
+    let insertIndex = 0; // index for insertImages array
+    
+    // Process each page position
+    for (let i = 0; i < totalPages; i++) {
+      const pageNumber = i + 1; // 1-based page number (for logging)
+      const insertPosition = i + 1; // Position before this page (1-based)
+      
+      // Insert all images that should be before this page (position = insertPosition)
+      while (insertIndex < insertImages.length && insertImages[insertIndex].position === insertPosition) {
+        const insertImg = insertImages[insertIndex];
+        try {
+          await insertImageToPdf(insertImg.image_data);
+          console.log(`✓ Inserted image at position ${insertImg.position} (before page ${pageNumber})`);
+          insertIndex++;
+        } catch (imgError) {
+          console.error(`✗ Error inserting image at position ${insertImg.position}:`, imgError.message);
+          insertIndex++;
+        }
+      }
+      
+      // Add the current page
+      outDoc.addPage(copiedPages[i]);
+      console.log(`✓ Added page ${pageNumber} of ${totalPages}`);
+    }
+    
+    // Insert any remaining images at the end (position > total pages)
+    while (insertIndex < insertImages.length) {
+      const insertImg = insertImages[insertIndex];
+      try {
+        await insertImageToPdf(insertImg.image_data);
+        console.log(`✓ Inserted remaining image at end (requested position: ${insertImg.position}, total pages: ${totalPages})`);
+        insertIndex++;
+      } catch (imgError) {
+        console.error(`✗ Error inserting remaining image:`, imgError.message);
+        insertIndex++;
+      }
+    }
+    
+    const finalPageCount = outDoc.getPageCount();
+    const insertedCount = insertImages.length;
+    console.log(`Final PDF: ${finalPageCount} pages (original: ${originalPageCount}, after delete/reorder: ${totalPages}, inserted images: ${insertedCount})`);
+    
+    if (insertedCount > 0 && finalPageCount === totalPages) {
+      console.warn(`⚠ WARNING: Expected ${totalPages + insertedCount} pages but got ${finalPageCount}. Images may not have been inserted.`);
+    }
+    
+    const finalPageCount = outDoc.getPageCount();
+    console.log(`Final PDF: ${finalPageCount} pages (original: ${originalPageCount}, after delete/reorder: ${totalPages}, inserted images: ${insertImages.length})`);
+    
+    // Save PDF
+    const pdfBytes = await outDoc.save();
+    const pdfPath = join(base, 'managed.pdf');
+    writeFileSync(pdfPath, Buffer.from(pdfBytes));
+    
+    const finalPageCount = outDoc.getPageCount();
+    const fileSize = Buffer.byteLength(pdfBytes);
+    const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+    
+    res.json({
+      success: true,
+      download_url: `/files/pdf-manage-pages/${id}/managed.pdf`,
+      filename: req.file.originalname || 'managed.pdf',
+      file_size_mb: fileSizeMB,
+      original_pages: originalPageCount,
+      final_pages: finalPageCount,
+      processing_time: '0' // Could add timing if needed
+    });
+  } catch (e) {
+    console.error('PDF manage pages error:', e);
+    res.status(500).json({ error: (e && e.message) || String(e) });
+  }
+});
+
 const PORT = process.env.PORT || 8787;
 app.listen(PORT, () => {
   // Write a small READY file for quick debugging
