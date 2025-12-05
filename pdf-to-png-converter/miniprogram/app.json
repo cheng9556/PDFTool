@@ -13,6 +13,8 @@
     "pages/rotate/index",
     "pages/compress/index",
     "pages/arrange/index",
+    "pages/longimage/index",
+    "pages/printimage/index",
     "pages/merge/index",
     "pages/split/index",
     "pages/reorder/index",

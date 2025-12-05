@@ -29,10 +29,10 @@ This is a test text with English characters.
 Testing automatic line wrapping and page breaking.
 
 功能特点：
-✓ 高性能转换
-✓ 质量优秀
-✓ 速度快速
-✓ 支持多种编码
+[+] 高性能转换
+[+] 质量优秀
+[+] 速度快速
+[+] 支持多种编码
 
 测试完成！"""
     
@@ -61,7 +61,7 @@ Testing automatic line wrapping and page breaking.
         
         if response.status_code == 200:
             result = response.json()
-            print("✓ 转换成功！")
+            print("[OK] 转换成功！")
             print(f"  文件名: {result['filename']}")
             print(f"  页数: {result['pages']}")
             print(f"  字符数: {result['characters']}")
@@ -82,15 +82,15 @@ Testing automatic line wrapping and page breaking.
                 with open(output_file, 'wb') as f:
                     f.write(download_response.content)
                 
-                print(f"✓ 文件已保存: {output_file}")
+                print(f"[OK] 文件已保存: {output_file}")
             else:
-                print(f"✗ 下载失败: {download_response.status_code}")
+                print(f"[ERROR] 下载失败: {download_response.status_code}")
         else:
             error = response.json().get('error', '未知错误')
-            print(f"✗ 转换失败: {error}")
+            print(f"[ERROR] 转换失败: {error}")
             
     except Exception as e:
-        print(f"✗ 请求失败: {str(e)}")
+        print(f"[ERROR] 请求失败: {str(e)}")
     
     print()
 
@@ -114,16 +114,17 @@ def test_txt_file():
 4. 中文字体支持
 
 性能测试：
-✓ 大文件支持（最大10MB）
-✓ 快速转换
-✓ 高质量输出
+[+] 大文件支持（最大10MB）
+[+] 快速转换
+[+] 高质量输出
 
 English text support test:
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
 Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
 
 特殊字符测试：
-""" + "!"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~\n"
+!#$%&()*+,-./:;<=>?@[]^_`{|}~
+"""
 
     # 保存测试文件
     test_file = 'test-sample.txt'
@@ -191,7 +192,7 @@ Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
             print(f"✗ 转换失败: {error}")
             
     except Exception as e:
-        print(f"✗ 请求失败: {str(e)}")
+        print(f"[ERROR] 请求失败: {str(e)}")
     
     finally:
         files['file'].close()
@@ -246,30 +247,30 @@ def test_large_text():
             print(f"✗ 转换失败: {error}")
             
     except Exception as e:
-        print(f"✗ 请求失败: {str(e)}")
+        print(f"[ERROR] 请求失败: {str(e)}")
     
     print()
 
 
 def main():
     print()
-    print("╔" + "=" * 58 + "╗")
-    print("║" + " " * 18 + "文本转PDF功能测试" + " " * 18 + "║")
-    print("╚" + "=" * 58 + "╝")
+    print("=" * 60)
+    print("            文本转PDF功能测试")
+    print("=" * 60)
     print()
     
     # 检查服务是否运行
     try:
         response = requests.get(f'{SERVER_URL}/health', timeout=5)
         if response.status_code == 200:
-            print("✓ Python服务正常运行")
+            print("[OK] Python服务正常运行")
             print()
         else:
-            print("✗ Python服务未正常响应")
+            print("[ERROR] Python服务未正常响应")
             print("  请先启动Python服务: cd server-python && python app_optimized.py")
             return
     except:
-        print("✗ 无法连接到Python服务")
+        print("[ERROR] 无法连接到Python服务")
         print("  请先启动Python服务: cd server-python && python app_optimized.py")
         return
     

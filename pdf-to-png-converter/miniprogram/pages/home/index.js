@@ -16,6 +16,8 @@ Page({
   goRotate() { wx.navigateTo({ url: '/pages/rotate/index' }); },
   goCompress() { wx.navigateTo({ url: '/pages/compress/index' }); },
   goArrange() { wx.navigateTo({ url: '/pages/arrange/index' }); },
+  goLongImage() { wx.navigateTo({ url: '/pages/longimage/index' }); },
+  goPrintImage() { wx.navigateTo({ url: '/pages/printimage/index' }); },
   goMerge() { wx.navigateTo({ url: '/pages/merge/index' }); },
   goSplit() { wx.navigateTo({ url: '/pages/split/index' }); },
   goReorder() { wx.navigateTo({ url: '/pages/pagesmanage/index' }); },

@@ -17,6 +17,12 @@ from datetime import datetime
 from PIL import Image
 import time
 import traceback
+import re
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
 
 # 配置日志
 logging.basicConfig(
@@ -549,7 +555,13 @@ def download_file(filename):
             'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'doc': 'application/msword',
             'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'xls': 'application/vnd.ms-excel'
+            'xls': 'application/vnd.ms-excel',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'gif': 'image/gif',
+            'bmp': 'image/bmp',
+            'webp': 'image/webp'
         }
         mimetype = mimetype_map.get(file_ext, 'application/octet-stream')
         
@@ -779,23 +791,6 @@ def arrange_upload_pdf():
         # 打开PDF获取页面信息
         doc = fitz.open(temp_path)
         total_pages = len(doc)
-        
-        # 生成每页缩略图
-        thumbnails = []
-        for page_num in range(total_pages):
-            page = doc[page_num]
-            # 生成缩略图（150x150像素）
-            mat = fitz.Matrix(150 / page.rect.width, 150 / page.rect.height)
-            pix = page.get_pixmap(matrix=mat)
-            img_data = pix.tobytes("png")
-            img_base64 = base64.b64encode(img_data).decode('utf-8')
-            thumbnails.append({
-                'page_number': page_num + 1,
-                'thumbnail': f'data:image/png;base64,{img_base64}',
-                'width': page.rect.width,
-                'height': page.rect.height
-            })
-        
         doc.close()
         
         file_size = os.path.getsize(temp_path)
@@ -807,14 +802,420 @@ def arrange_upload_pdf():
             'file_id': file_id,
             'filename': filename,
             'file_size': file_size,
-            'total_pages': total_pages,
-            'thumbnails': thumbnails
+            'total_pages': total_pages
         })
         
     except Exception as e:
         logger.error(f"上传PDF失败: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': f'上传失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/arrange/thumbnail', methods=['POST'])
+def arrange_get_thumbnail():
+    """
+    获取PDF指定页面的缩略图
+    参数: file_id, page_number
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': '缺少必要参数'}), 400
+        
+        file_id = data.get('file_id')
+        page_number = data.get('page_number')
+        
+        if not file_id or not page_number:
+            return jsonify({'error': '缺少file_id或page_number'}), 400
+        
+        # 查找对应的PDF文件
+        upload_folder = app.config['UPLOAD_FOLDER']
+        pdf_files = [f for f in os.listdir(upload_folder) if f.startswith(f'arrange_{file_id}_')]
+        
+        if not pdf_files:
+            return jsonify({'error': '未找到对应的PDF文件'}), 404
+        
+        pdf_path = os.path.join(upload_folder, pdf_files[0])
+        doc = fitz.open(pdf_path)
+        
+        # 验证页码
+        if page_number < 1 or page_number > len(doc):
+            doc.close()
+            return jsonify({'error': '页码超出范围'}), 400
+        
+        # 生成缩略图
+        page = doc[page_number - 1]
+        mat = fitz.Matrix(150 / page.rect.width, 150 / page.rect.height)
+        pix = page.get_pixmap(matrix=mat)
+        img_data = pix.tobytes("png")
+        img_base64 = base64.b64encode(img_data).decode('utf-8')
+        
+        doc.close()
+        
+        return jsonify({
+            'success': True,
+            'thumbnail': f'data:image/png;base64,{img_base64}'
+        })
+        
+    except Exception as e:
+        logger.error(f"获取缩略图失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'获取缩略图失败: {str(e)}'}), 500
+
+
+@app.route('/file/get-pages', methods=['POST'])
+def get_file_pages():
+    """
+    获取文件的页数（支持PDF/Word/Excel/PPT）
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '未找到文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '未选择文件'}), 400
+        
+        filename = secure_filename(file.filename)
+        file_ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+        
+        if file_ext not in ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']:
+            return jsonify({'error': '不支持的文件格式'}), 400
+        
+        # 保存临时文件
+        file_id = uuid.uuid4().hex[:8]
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"pages_{file_id}_{filename}")
+        file.save(temp_path)
+        
+        total_pages = 0
+        
+        if file_ext == 'pdf':
+            # PDF文件
+            doc = fitz.open(temp_path)
+            total_pages = len(doc)
+            doc.close()
+        else:
+            # Office文件，需要先转PDF才能获取页数
+            error_msg = None
+            try:
+                if not HAS_REQUESTS:
+                    error_msg = '需要安装requests库才能获取Office文件页数: pip install requests'
+                else:
+                    java_url = 'http://localhost:8788'
+                    
+                    if file_ext in ['doc', 'docx']:
+                        convert_url = f'{java_url}/word/topdf'
+                    elif file_ext in ['xls', 'xlsx']:
+                        convert_url = f'{java_url}/excel/topdf'
+                    elif file_ext in ['ppt', 'pptx']:
+                        convert_url = f'{java_url}/ppt/topdf'
+                    else:
+                        convert_url = None
+                    
+                    if convert_url:
+                        # 检查Java服务是否可用
+                        try:
+                            health_check = requests.get(f'{java_url}/health', timeout=5)
+                            if health_check.status_code != 200:
+                                error_msg = 'Java服务(8788端口)不可用，请确保服务正在运行'
+                        except requests.exceptions.RequestException:
+                            error_msg = '无法连接到Java服务(8788端口)，请确保服务正在运行'
+                        
+                        if not error_msg:
+                            with open(temp_path, 'rb') as f:
+                                files = {'file': (filename, f, f'application/{file_ext}')}
+                                response = requests.post(convert_url, files=files, timeout=120)
+                            
+                            if response.status_code == 200:
+                                result = response.json()
+                                if 'url' in result:
+                                    # 下载PDF获取页数
+                                    pdf_download_url = f"{java_url}{result['url']}"
+                                    pdf_response = requests.get(pdf_download_url, timeout=60)
+                                    if pdf_response.status_code == 200:
+                                        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], f"pages_{file_id}_temp.pdf")
+                                        with open(pdf_path, 'wb') as pf:
+                                            pf.write(pdf_response.content)
+                                        doc = fitz.open(pdf_path)
+                                        total_pages = len(doc)
+                                        doc.close()
+                                        try:
+                                            os.remove(pdf_path)
+                                        except:
+                                            pass
+                                    else:
+                                        error_msg = f'下载转换后的PDF失败: {pdf_response.status_code}'
+                                else:
+                                    error_msg = result.get('error', '转换响应格式错误')
+                            else:
+                                try:
+                                    error_data = response.json()
+                                    error_msg = error_data.get('error', f'Java服务转换失败: {response.status_code}')
+                                except:
+                                    error_msg = f'Java服务转换失败: {response.status_code}'
+                    else:
+                        error_msg = '不支持的文件格式转换'
+            except requests.exceptions.Timeout:
+                error_msg = '请求超时，请检查Java服务(8788端口)是否正常运行'
+            except requests.exceptions.ConnectionError:
+                error_msg = '无法连接到Java服务(8788端口)，请确保服务正在运行'
+            except Exception as e:
+                logger.error(f"获取Office文件页数失败: {str(e)}")
+                logger.error(traceback.format_exc())
+                error_msg = f'获取页数失败: {str(e)}'
+            
+            if error_msg:
+                # 删除临时文件
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+                return jsonify({
+                    'success': False,
+                    'error': error_msg,
+                    'total_pages': 0,
+                    'file_type': file_ext
+                }), 500
+        
+        # 删除临时文件
+        try:
+            os.remove(temp_path)
+        except:
+            pass
+        
+        return jsonify({
+            'success': True,
+            'total_pages': total_pages,
+            'file_type': file_ext
+        })
+        
+    except Exception as e:
+        logger.error(f"获取文件页数失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'获取页数失败: {str(e)}'}), 500
+
+
+@app.route('/file/to-long-image', methods=['POST'])
+def convert_to_long_image():
+    """
+    文件转长图（支持PDF/Word/Excel/PPT）
+    1. PDF文件：直接用PyMuPDF转换
+    2. Word/Excel/PPT：先转PDF，再转长图
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '未找到文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '未选择文件'}), 400
+        
+        filename = secure_filename(file.filename)
+        file_ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+        
+        # 检查文件类型
+        if file_ext not in ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']:
+            return jsonify({'error': '不支持的文件格式，仅支持PDF/Word/Excel/PPT'}), 400
+        
+        # 获取参数
+        pages_param = request.form.get('pages', 'all')  # 页码范围
+        output_format = request.form.get('format', 'jpg').lower()  # pdf/jpg/png
+        dpi = int(request.form.get('dpi', 120))  # 图片DPI，降低默认值提升速度
+        
+        if output_format not in ['pdf', 'jpg', 'png']:
+            output_format = 'jpg'
+        
+        # 优化DPI范围，降低上限提升速度
+        if dpi < 72 or dpi > 200:
+            dpi = 120
+        
+        start_time = time.time()
+        
+        # 保存上传的文件
+        file_id = uuid.uuid4().hex[:8]
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"longimg_{file_id}_{filename}")
+        file.save(temp_path)
+        
+        # 如果是Word/Excel/PPT，先转PDF
+        pdf_path = temp_path
+        if file_ext in ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']:
+            logger.info(f"Office文件转PDF: {filename}")
+            # 调用Java服务转PDF（如果可用）
+            # 或者使用Python库转PDF
+            # 这里先尝试调用Java服务
+            try:
+                import requests
+                java_url = 'http://localhost:8788'
+                
+                # 根据文件类型选择接口
+                if file_ext in ['doc', 'docx']:
+                    convert_url = f'{java_url}/word/topdf'
+                elif file_ext in ['xls', 'xlsx']:
+                    convert_url = f'{java_url}/excel/topdf'
+                elif file_ext in ['ppt', 'pptx']:
+                    convert_url = f'{java_url}/ppt/topdf'
+                else:
+                    convert_url = None
+                
+                if convert_url and HAS_REQUESTS:
+                    with open(temp_path, 'rb') as f:
+                        files = {'file': (filename, f, f'application/{file_ext}')}
+                        response = requests.post(convert_url, files=files, timeout=120)
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        if 'url' in result:
+                            # 下载PDF文件
+                            pdf_download_url = f"{java_url}{result['url']}"
+                            pdf_response = requests.get(pdf_download_url, timeout=60)
+                            if pdf_response.status_code == 200:
+                                pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], f"longimg_{file_id}_converted.pdf")
+                                with open(pdf_path, 'wb') as pf:
+                                    pf.write(pdf_response.content)
+                                logger.info(f"Office文件转PDF成功: {filename}")
+                            else:
+                                raise Exception("下载转换后的PDF失败")
+                        else:
+                            raise Exception("转换响应格式错误")
+                    else:
+                        raise Exception(f"Java服务转换失败: {response.status_code}")
+                else:
+                    return jsonify({'error': '不支持的文件格式转换'}), 400
+                    
+            except Exception as e:
+                logger.warning(f"调用Java服务失败: {str(e)}")
+                if not HAS_REQUESTS:
+                    return jsonify({'error': '需要安装requests库才能转换Office文件: pip install requests'}), 500
+                return jsonify({'error': f'Office文件转PDF失败，请确保Java服务(8788端口)正在运行: {str(e)}'}), 500
+        
+        # 打开PDF
+        doc = fitz.open(pdf_path)
+        total_pages = len(doc)
+        
+        # 解析页码范围
+        pages_to_convert = []
+        if pages_param.lower() == 'all' or pages_param.strip() == '':
+            pages_to_convert = list(range(total_pages))
+        else:
+            # 解析页码：支持 "1,3,5" 或 "1-5" 或 "1-3,5,7-9"
+            parts = re.split(r'[,，]', pages_param)
+            for part in parts:
+                part = part.strip()
+                if '-' in part:
+                    # 范围
+                    start, end = part.split('-', 1)
+                    start = int(start.strip())
+                    end = int(end.strip())
+                    for p in range(start - 1, min(end, total_pages)):
+                        if p >= 0 and p not in pages_to_convert:
+                            pages_to_convert.append(p)
+                else:
+                    # 单页
+                    p = int(part.strip()) - 1
+                    if 0 <= p < total_pages and p not in pages_to_convert:
+                        pages_to_convert.append(p)
+        
+        pages_to_convert.sort()
+        
+        # 检查页面数量限制
+        if len(pages_to_convert) > 50:
+            doc.close()
+            return jsonify({'error': '最多支持50页，建议20页以内'}), 400
+        
+        if len(pages_to_convert) == 0:
+            doc.close()
+            return jsonify({'error': '未选择有效页面'}), 400
+        
+        logger.info(f"开始转换长图: {filename}, 页数: {len(pages_to_convert)}, 格式: {output_format}, DPI: {dpi}")
+        
+        # 转换页面为图片（优化版）
+        images = []
+        gap = 0  # 页面间距（像素）
+        
+        # 预先计算缩放矩阵
+        zoom = dpi / 72.0
+        mat = fitz.Matrix(zoom, zoom)
+        
+        for page_idx in pages_to_convert:
+            page = doc[page_idx]
+            # 使用优化的pixmap参数
+            pix = page.get_pixmap(matrix=mat, alpha=False)  # alpha=False提升速度
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            images.append(img)
+            # 释放pixmap内存
+            pix = None
+        
+        doc.close()
+        
+        # 计算长图尺寸
+        max_width = max(img.width for img in images)
+        total_height = sum(img.height for img in images) + gap * (len(images) - 1)
+        
+        # 创建长图
+        long_img = Image.new('RGB', (max_width, total_height), (255, 255, 255))
+        y_offset = 0
+        for img in images:
+            # 居中放置
+            x_offset = (max_width - img.width) // 2
+            long_img.paste(img, (x_offset, y_offset))
+            y_offset += img.height + gap
+        
+        # 生成输出文件名
+        output_filename = f"longimage_{file_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{output_format}"
+        output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+        
+        # 保存长图（优化版）
+        if output_format == 'pdf':
+            # 将图片保存为PDF（使用PyMuPDF）
+            pdf_doc = fitz.open()
+            # 创建页面（尺寸转换为点，PyMuPDF使用点为单位）
+            page = pdf_doc.new_page(width=max_width, height=total_height)
+            # 将PIL图片转换为bytes（使用JPEG格式更快）
+            img_bytes = io.BytesIO()
+            long_img.save(img_bytes, format='JPEG', quality=85)
+            img_bytes.seek(0)
+            # 插入图片到PDF
+            page.insert_image(fitz.Rect(0, 0, max_width, total_height), stream=img_bytes.getvalue())
+            # 移除clean参数提升保存速度
+            pdf_doc.save(output_path, garbage=4, deflate=True)
+            pdf_doc.close()
+        elif output_format == 'jpg':
+            # 降低质量提升速度，85质量已足够
+            long_img.save(output_path, format='JPEG', quality=85, optimize=True)
+        else:  # png
+            # PNG使用压缩级别控制
+            long_img.save(output_path, format='PNG', compress_level=6, optimize=False)
+        
+        # 删除临时文件
+        try:
+            if pdf_path != temp_path:
+                os.remove(pdf_path)
+            os.remove(temp_path)
+        except:
+            pass
+        
+        output_size = os.path.getsize(output_path)
+        elapsed_time = time.time() - start_time
+        
+        logger.info(f"长图转换完成: {output_filename}, 页数: {len(pages_to_convert)}, 尺寸: {max_width}x{total_height}, "
+                   f"格式: {output_format}, 大小: {output_size / 1024:.1f}KB, 耗时: {elapsed_time:.2f}秒")
+        
+        return jsonify({
+            'success': True,
+            'filename': output_filename,
+            'url': f'/download/{output_filename}',
+            'format': output_format,
+            'width': max_width,
+            'height': total_height,
+            'file_size': output_size,
+            'pages_count': len(pages_to_convert),
+            'elapsed_time': round(elapsed_time, 2)
+        })
+        
+    except Exception as e:
+        logger.error(f"转长图失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'转换失败: {str(e)}'}), 500
 
 
 @app.route('/pdf/arrange/generate', methods=['POST'])
@@ -922,6 +1323,247 @@ def arrange_generate_pdf():
         return jsonify({'error': f'编排失败: {str(e)}'}), 500
 
 
+@app.route('/longimage/print', methods=['POST'])
+def print_longimage():
+    """
+    长图打印功能：将长图裁剪并排版到A4页面中
+    支持1/2/3列布局
+    输入：图片或PDF文件
+    输出：适合打印的PDF文件
+    """
+    try:
+        # 检查文件
+        if 'file' not in request.files:
+            return jsonify({'error': '未上传文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '文件名为空'}), 400
+        
+        # 获取分栏选项（1/2/3列）
+        columns = int(request.form.get('columns', 1))
+        if columns not in [1, 2, 3]:
+            return jsonify({'error': '分栏数必须是1、2或3'}), 400
+        
+        # 获取DPI设置（影响质量）
+        dpi = int(request.form.get('dpi', 300))
+        
+        start_time = time.time()
+        
+        # 保存上传的文件
+        filename = secure_filename(file.filename)
+        file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        upload_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}_{filename}")
+        file.save(upload_path)
+        
+        logger.info(f"开始处理长图打印: {filename}, 分栏: {columns}, DPI: {dpi}")
+        
+        # 将输入转换为PIL Image
+        images = []
+        if file_ext == 'pdf':
+            # PDF文件：转换每一页为图片
+            pdf_doc = fitz.open(upload_path)
+            for page_num in range(len(pdf_doc)):
+                page = pdf_doc[page_num]
+                # 使用指定DPI渲染
+                mat = fitz.Matrix(dpi/72, dpi/72)
+                pix = page.get_pixmap(matrix=mat)
+                img_data = pix.tobytes("png")
+                img = Image.open(io.BytesIO(img_data))
+                images.append(img)
+            pdf_doc.close()
+        else:
+            # 图片文件：直接打开
+            img = Image.open(upload_path)
+            # 转换为RGB（处理RGBA等格式）
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            images.append(img)
+        
+        # A4尺寸（72 DPI下的点数）
+        A4_WIDTH_PT = 595
+        A4_HEIGHT_PT = 842
+        
+        # 页面边距（点）
+        MARGIN = 20
+        
+        # 可用区域尺寸
+        usable_width = A4_WIDTH_PT - 2 * MARGIN
+        usable_height = A4_HEIGHT_PT - 2 * MARGIN
+        
+        # 计算每列的宽度
+        column_spacing = 10  # 列间距
+        if columns == 1:
+            column_width = usable_width
+        elif columns == 2:
+            column_width = (usable_width - column_spacing) / 2
+        else:  # 3列
+            column_width = (usable_width - 2 * column_spacing) / 3
+        
+        # 创建输出PDF
+        output_pdf = fitz.open()
+        
+        # 收集所有需要处理的图片段
+        all_segments = []
+        
+        for img_index, source_img in enumerate(images):
+            logger.info(f"处理第 {img_index + 1}/{len(images)} 张图片, 尺寸: {source_img.size}")
+            
+            # 计算缩放比例（保持宽高比）
+            img_width, img_height = source_img.size
+            scale = (column_width * dpi / 72) / img_width
+            
+            # 调整图片尺寸以适应列宽
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            resized_img = source_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            logger.info(f"图片缩放后尺寸: {new_width}x{new_height}px")
+            
+            # 将整张图片添加到待处理列表（不再预先切割）
+            # 将整个图片添加到待处理列表
+            all_segments.append({
+                'image': resized_img,
+                'width': new_width,
+                'height': new_height
+            })
+        
+        # 智能多列布局算法
+        logger.info(f"开始智能布局: 共{len(all_segments)}张图片, {columns}列")
+        
+        # 初始化页面状态
+        current_page = None
+        current_column = 0  # 当前列索引（0, 1, 2...）
+        column_y_positions = [MARGIN] * columns  # 每列的当前Y位置
+        
+        # 遍历所有图片段
+        for seg_data in all_segments:
+            img = seg_data['image']
+            img_width_px = seg_data['width']
+            img_height_px = seg_data['height']
+            
+            # 需要切割成多段以适应列高
+            segment_height_px = int(usable_height * dpi / 72)
+            remaining_height = img_height_px
+            y_offset = 0
+            
+            while remaining_height > 0:
+                # 计算当前段的高度
+                current_seg_height = min(segment_height_px, remaining_height)
+                
+                # 裁剪当前段
+                segment = img.crop((0, y_offset, img_width_px, y_offset + current_seg_height))
+                
+                # 计算segment在PDF中的尺寸（点）
+                seg_width_pt = column_width
+                seg_height_pt = current_seg_height * 72 / dpi
+                
+                # 查找可以放置的列
+                placed = False
+                for attempt in range(columns):
+                    check_col = (current_column + attempt) % columns
+                    
+                    # 检查当前列是否有足够空间
+                    if column_y_positions[check_col] + seg_height_pt <= A4_HEIGHT_PT - MARGIN:
+                        # 如果需要新页面
+                        if current_page is None:
+                            current_page = output_pdf.new_page(width=A4_WIDTH_PT, height=A4_HEIGHT_PT)
+                            column_y_positions = [MARGIN] * columns
+                        
+                        # 计算X位置
+                        if columns == 1:
+                            x = MARGIN
+                        elif columns == 2:
+                            x = MARGIN + check_col * (column_width + column_spacing)
+                        else:  # 3列
+                            x = MARGIN + check_col * (column_width + column_spacing)
+                        
+                        y = column_y_positions[check_col]
+                        
+                        # 保存segment为临时文件
+                        temp_seg_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_seg_{uuid.uuid4()}.png")
+                        segment.save(temp_seg_path, "PNG", optimize=True, quality=95)
+                        
+                        # 插入图片到PDF
+                        rect = fitz.Rect(x, y, x + seg_width_pt, y + seg_height_pt)
+                        current_page.insert_image(rect, filename=temp_seg_path)
+                        
+                        # 删除临时文件
+                        try:
+                            os.remove(temp_seg_path)
+                        except:
+                            pass
+                        
+                        # 更新该列的Y位置
+                        column_y_positions[check_col] += seg_height_pt
+                        current_column = check_col
+                        placed = True
+                        break
+                
+                # 如果所有列都满了，创建新页面
+                if not placed:
+                    current_page = output_pdf.new_page(width=A4_WIDTH_PT, height=A4_HEIGHT_PT)
+                    column_y_positions = [MARGIN] * columns
+                    current_column = 0
+                    
+                    # 在新页面的第一列放置
+                    x = MARGIN
+                    y = MARGIN
+                    
+                    temp_seg_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_seg_{uuid.uuid4()}.png")
+                    segment.save(temp_seg_path, "PNG", optimize=True, quality=95)
+                    
+                    rect = fitz.Rect(x, y, x + seg_width_pt, y + seg_height_pt)
+                    current_page.insert_image(rect, filename=temp_seg_path)
+                    
+                    try:
+                        os.remove(temp_seg_path)
+                    except:
+                        pass
+                    
+                    column_y_positions[0] = MARGIN + seg_height_pt
+                
+                # 更新剩余高度和偏移
+                remaining_height -= current_seg_height
+                y_offset += current_seg_height
+        
+        # 获取页数（在关闭之前）
+        total_pages = len(output_pdf)
+        
+        # 保存输出PDF
+        output_filename = f"print_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.pdf"
+        output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+        output_pdf.save(output_path, garbage=4, deflate=True)
+        output_pdf.close()
+        
+        # 清理上传的文件
+        try:
+            os.remove(upload_path)
+        except:
+            pass
+        
+        # 获取输出文件大小
+        output_size = os.path.getsize(output_path)
+        elapsed_time = time.time() - start_time
+        
+        logger.info(f"长图打印完成: {output_filename}, 页数: {total_pages}, 耗时: {elapsed_time:.2f}秒")
+        
+        return jsonify({
+            'success': True,
+            'filename': output_filename,
+            'url': f'/download/{output_filename}',
+            'total_pages': total_pages,
+            'file_size': output_size,
+            'elapsed_time': round(elapsed_time, 2),
+            'columns': columns
+        })
+        
+    except Exception as e:
+        logger.error(f"长图打印失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
+
+
 @app.errorhandler(413)
 def request_entity_too_large(error):
     """文件过大错误处理"""
@@ -937,24 +1579,29 @@ def internal_server_error(error):
 
 if __name__ == '__main__':
     logger.info("========================================")
-    logger.info("PDF转Word服务启动 - 增强版 v2.0")
+    logger.info("PDF工具服务启动 v2.0")
     logger.info("端口: 8789")
-    logger.info("支持的格式: PDF -> DOCX")
-    logger.info("最大文件大小: 50MB")
+    logger.info("支持的格式: PDF/Word/Excel/PPT/图片")
+    logger.info("最大文件大小: 100MB")
     logger.info("========================================")
     logger.info("功能特性:")
-    logger.info("  ✓ 复杂格式转换（表格、图片、样式）")
-    logger.info("  ✓ 简化模式（不含图片）")
-    logger.info("  ✓ 纯文本模式（仅提取文字）")
-    logger.info("  ✓ 页码范围选择（单页/多页/范围）")
-    logger.info("  ✓ PDF预览图生成")
-    logger.info("  ✓ 性能优化（内存管理）")
+    logger.info("  ✓ PDF转Word/Excel/PPT/图片")
+    logger.info("  ✓ Word/Excel/PPT转PDF")
+    logger.info("  ✓ PDF压缩优化")
+    logger.info("  ✓ PDF页面编排")
+    logger.info("  ✓ PDF旋转")
+    logger.info("  ✓ 文件转长图")
+    logger.info("  ✓ 长图打印 (NEW!)")
     logger.info("========================================")
     logger.info("API端点:")
     logger.info("  GET  /health - 健康检查")
-    logger.info("  POST /pdf/info - 获取PDF信息和预览图")
-    logger.info("  POST /pdf/toword - PDF转Word（支持多种模式）")
-    logger.info("  GET  /download/<filename> - 下载转换文件")
+    logger.info("  POST /longimage/print - 长图打印")
+    logger.info("  POST /pdf/compress - PDF压缩")
+    logger.info("  POST /pdf/arrange/* - PDF页面编排")
+    logger.info("  POST /file/to-long-image - 文件转长图")
+    logger.info("  POST /pdf/rotate - PDF旋转")
+    logger.info("  GET  /download/<filename> - 下载文件")
     logger.info("========================================\n")
     
-    app.run(host='0.0.0.0', port=8789, debug=True)
+    # 禁用reloader解决Windows权限问题
+    app.run(host='0.0.0.0', port=8789, debug=True, use_reloader=False)

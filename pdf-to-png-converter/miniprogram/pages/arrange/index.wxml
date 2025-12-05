@@ -31,23 +31,20 @@
             </view>
           </view>
           
-          <!-- 页面网格 -->
+          <!-- 页码按钮网格 -->
           <view class="pages-grid">
             <view 
-              wx:for="{{pdfFile.thumbnails}}" 
+              wx:for="{{pdfFile.pages}}" 
               wx:key="page_number" 
-              wx:for-item="thumb" 
-              wx:for-index="thumbIndex"
-              class="page-item {{thumb.selected ? 'selected' : ''}}"
+              wx:for-item="page" 
+              wx:for-index="pageIndex"
+              class="page-btn {{page.selected ? 'selected' : ''}}"
               bindtap="selectPage"
               data-file-index="{{fileIndex}}"
-              data-page-number="{{thumb.page_number}}"
+              data-page-number="{{page.page_number}}"
             >
-              <view class="page-thumbnail-wrapper">
-                <image class="page-thumbnail" src="{{thumb.thumbnail}}" mode="aspectFit"></image>
-                <view wx:if="{{thumb.selected}}" class="selected-badge">✓</view>
-              </view>
-              <view class="page-number">第{{thumb.page_number}}页</view>
+              <text class="page-btn-text">{{page.page_number}}</text>
+              <view wx:if="{{page.selected}}" class="page-btn-check">✓</view>
             </view>
           </view>
         </view>
@@ -71,7 +68,8 @@
         >
           <view class="selected-page-content">
             <view class="selected-page-thumbnail-wrapper">
-              <image class="selected-page-thumbnail" src="{{page.thumbnail}}" mode="aspectFit"></image>
+              <view wx:if="{{page.loading}}" class="thumbnail-loading">加载中...</view>
+              <image wx:else class="selected-page-thumbnail" src="{{page.thumbnail}}" mode="aspectFit"></image>
               <view class="new-page-number">{{page.new_page_number}}</view>
             </view>
             <view class="selected-page-info">

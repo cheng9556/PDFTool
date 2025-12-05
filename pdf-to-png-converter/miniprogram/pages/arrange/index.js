@@ -81,18 +81,21 @@ Page({
             try {
               var data = JSON.parse(res.data);
               if (data.success) {
-                var pdfFile = {
+                // 生成页码数组（不包含缩略图）
+              var pageNumbers = [];
+              for (var i = 1; i <= data.total_pages; i++) {
+                pageNumbers.push({
+                  page_number: i,
+                  selected: false  // 是否已选择
+                });
+              }
+              
+              var pdfFile = {
                   file_id: data.file_id,
                   filename: data.filename,
                   total_pages: data.total_pages,
-                  thumbnails: data.thumbnails.map(function(thumb) {
-                    return {
-                      page_number: thumb.page_number,
-                      thumbnail: thumb.thumbnail,
-                      selected: false  // 是否已选择
-                    };
-                  }),
-                  pages: []  // 该文件已选择的页面
+                  pages: pageNumbers,  // 页码数组
+                  selectedPages: []  // 该文件已选择的页面编号
                 };
                 
                 var pdfFiles = that.data.pdfFiles;
@@ -152,35 +155,28 @@ Page({
       selectedPages.splice(existingIndex, 1);
       // 更新新页码
       that.updatePageNumbers(selectedPages);
-      // 从文件的pages数组中移除
-      var pageIndex = pdfFile.pages.indexOf(pageNumber);
+      // 从文件的selectedPages数组中移除
+      var pageIndex = pdfFile.selectedPages.indexOf(pageNumber);
       if (pageIndex >= 0) {
-        pdfFile.pages.splice(pageIndex, 1);
+        pdfFile.selectedPages.splice(pageIndex, 1);
       }
       
-      // 更新thumbnail的selected状态
-      for (var k = 0; k < pdfFile.thumbnails.length; k++) {
-        if (pdfFile.thumbnails[k].page_number === pageNumber) {
-          pdfFile.thumbnails[k].selected = false;
+      // 更新pages数组的selected状态
+      for (var k = 0; k < pdfFile.pages.length; k++) {
+        if (pdfFile.pages[k].page_number === pageNumber) {
+          pdfFile.pages[k].selected = false;
           break;
         }
       }
     } else {
       // 未选择，添加到右侧
-      var thumbnail = null;
-      for (var j = 0; j < pdfFile.thumbnails.length; j++) {
-        if (pdfFile.thumbnails[j].page_number === pageNumber) {
-          thumbnail = pdfFile.thumbnails[j].thumbnail;
-          break;
-        }
-      }
-      
       var newPage = {
         file_id: pdfFile.file_id,
         filename: pdfFile.filename,
         page_number: pageNumber,
-        thumbnail: thumbnail,
-        new_page_number: that.data.selectedPages.length + 1
+        thumbnail: '',  // 先设为空，稍后加载
+        new_page_number: that.data.selectedPages.length + 1,
+        loading: true  // 标记正在加载缩略图
       };
       
       var selectedPages = that.data.selectedPages;
@@ -189,18 +185,21 @@ Page({
         selectedPages: selectedPages
       });
       
-      // 添加到文件的pages数组
-      if (pdfFile.pages.indexOf(pageNumber) < 0) {
-        pdfFile.pages.push(pageNumber);
+      // 添加到文件的selectedPages数组
+      if (pdfFile.selectedPages.indexOf(pageNumber) < 0) {
+        pdfFile.selectedPages.push(pageNumber);
       }
       
-      // 更新thumbnail的selected状态
-      for (var k = 0; k < pdfFile.thumbnails.length; k++) {
-        if (pdfFile.thumbnails[k].page_number === pageNumber) {
-          pdfFile.thumbnails[k].selected = true;
+      // 更新pages数组的selected状态
+      for (var k = 0; k < pdfFile.pages.length; k++) {
+        if (pdfFile.pages[k].page_number === pageNumber) {
+          pdfFile.pages[k].selected = true;
           break;
         }
       }
+      
+      // 获取该页面的缩略图
+      that.loadPageThumbnail(fileIndex, selectedPages.length - 1, pdfFile.file_id, pageNumber);
     }
     
     // 更新文件列表
@@ -208,6 +207,45 @@ Page({
     pdfFiles[fileIndex] = pdfFile;
     that.setData({
       pdfFiles: pdfFiles
+    });
+  },
+
+  // 加载页面缩略图
+  loadPageThumbnail: function(fileIndex, pageIndex, fileId, pageNumber) {
+    var that = this;
+    
+    wx.request({
+      url: serverUrl + '/pdf/arrange/thumbnail',
+      method: 'POST',
+      header: {
+        'content-type': 'application/json'
+      },
+      data: {
+        file_id: fileId,
+        page_number: pageNumber
+      },
+      success: function(res) {
+        if (res.statusCode === 200 && res.data.success) {
+          var selectedPages = that.data.selectedPages;
+          if (selectedPages[pageIndex]) {
+            selectedPages[pageIndex].thumbnail = res.data.thumbnail;
+            selectedPages[pageIndex].loading = false;
+            that.setData({
+              selectedPages: selectedPages
+            });
+          }
+        }
+      },
+      fail: function(err) {
+        console.error('加载缩略图失败:', err);
+        var selectedPages = that.data.selectedPages;
+        if (selectedPages[pageIndex]) {
+          selectedPages[pageIndex].loading = false;
+          that.setData({
+            selectedPages: selectedPages
+          });
+        }
+      }
     });
   },
 
@@ -287,19 +325,19 @@ Page({
     selectedPages.splice(index, 1);
     that.updatePageNumbers(selectedPages);
     
-    // 从对应文件的pages数组中移除
+    // 从对应文件的selectedPages数组中移除
     for (var i = 0; i < that.data.pdfFiles.length; i++) {
       var pdfFile = that.data.pdfFiles[i];
       if (pdfFile.file_id === page.file_id) {
-        var pageIndex = pdfFile.pages.indexOf(page.page_number);
+        var pageIndex = pdfFile.selectedPages.indexOf(page.page_number);
         if (pageIndex >= 0) {
-          pdfFile.pages.splice(pageIndex, 1);
+          pdfFile.selectedPages.splice(pageIndex, 1);
         }
         
-        // 更新thumbnail的selected状态
-        for (var k = 0; k < pdfFile.thumbnails.length; k++) {
-          if (pdfFile.thumbnails[k].page_number === page.page_number) {
-            pdfFile.thumbnails[k].selected = false;
+        // 更新pages数组的selected状态
+        for (var k = 0; k < pdfFile.pages.length; k++) {
+          if (pdfFile.pages[k].page_number === page.page_number) {
+            pdfFile.pages[k].selected = false;
             break;
           }
         }
