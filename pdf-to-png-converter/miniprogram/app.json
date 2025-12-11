@@ -1,6 +1,7 @@
 {
   "pages": [
     "pages/home/index",
+    "pages/collage/index",
     "pages/pptconvert/index",
     "pages/text2pdf/index",
     "pages/pdfextract/index",
@@ -15,6 +16,13 @@
     "pages/arrange/index",
     "pages/longimage/index",
     "pages/printimage/index",
+    "pages/grayscale/index",
+    "pages/rename/index",
+    "pages/pagenumber/index",
+    "pages/crop/index",
+    "pages/combine/index",
+    "pages/watermark/index",
+    "pages/remove-watermark/index",
     "pages/merge/index",
     "pages/split/index",
     "pages/reorder/index",

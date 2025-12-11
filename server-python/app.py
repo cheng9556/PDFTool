@@ -14,10 +14,12 @@ import io
 import base64
 from werkzeug.utils import secure_filename
 from datetime import datetime
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import time
 import traceback
 import re
+import shutil
+import platform
 try:
     import requests
     HAS_REQUESTS = True
@@ -1218,6 +1220,221 @@ def convert_to_long_image():
         return jsonify({'error': f'转换失败: {str(e)}'}), 500
 
 
+# 辅助：加载中文字体（用于拼图描述）
+def load_font(size=36):
+    """尝试加载系统中文字体，失败则回退默认字体"""
+    font_candidates = [
+        r"C:\\Windows\\Fonts\\msyh.ttc",
+        r"C:\\Windows\\Fonts\\simhei.ttf",
+        r"C:\\Windows\\Fonts\\simsun.ttc",
+        "msyh.ttc",
+        "simhei.ttf",
+        "simsun.ttc"
+    ]
+    for path in font_candidates:
+        try:
+            if os.path.exists(path):
+                return ImageFont.truetype(path, size=size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+@app.route('/image/collage', methods=['POST'])
+def image_collage():
+    """
+    图片拼图
+    - 支持A4画布（300dpi，2480x3508）
+    - 支持6种布局：
+        full           : 单图铺满
+        two_vertical   : 左右两列
+        three_vertical : 三列
+        two_horizontal : 上下两行
+        four_grid      : 2x2
+        six_grid       : 2x3
+    - captions: 每张图片下方15字描述
+    - output_type: image（jpg）或 pdf（多页）
+    """
+    try:
+        start_time = time.time()
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': '缺少必要参数'}), 400
+
+        layout = data.get('layout', 'full')
+        output_type = data.get('output_type', 'image')
+        images_base64 = data.get('images', [])
+        captions = data.get('captions', [])
+
+        if not images_base64:
+            return jsonify({'error': '请至少上传一张图片'}), 400
+
+        # 限制数量，避免内存压力
+        if len(images_base64) > 30:
+            return jsonify({'error': '最多支持30张图片'}), 400
+
+        # A4尺寸（300dpi）
+        A4_WIDTH, A4_HEIGHT = 2480, 3508
+        background_color = (255, 255, 255)
+        caption_height = 100  # 预留描述高度
+        caption_font = load_font(size=36)
+        caption_color = (80, 80, 80)
+
+        # 布局定义：归一化坐标（0-1）
+        layouts = {
+            'full': [
+                {'x': 0.04, 'y': 0.04, 'w': 0.92, 'h': 0.92}
+            ],
+            'two_vertical': [
+                {'x': 0.03, 'y': 0.04, 'w': 0.47, 'h': 0.92},
+                {'x': 0.50, 'y': 0.04, 'w': 0.47, 'h': 0.92}
+            ],
+            'three_vertical': [
+                {'x': 0.02, 'y': 0.04, 'w': 0.31, 'h': 0.92},
+                {'x': 0.345, 'y': 0.04, 'w': 0.31, 'h': 0.92},
+                {'x': 0.67, 'y': 0.04, 'w': 0.31, 'h': 0.92}
+            ],
+            'two_horizontal': [
+                {'x': 0.04, 'y': 0.04, 'w': 0.92, 'h': 0.45},
+                {'x': 0.04, 'y': 0.51, 'w': 0.92, 'h': 0.45}
+            ],
+            'four_grid': [
+                {'x': 0.04, 'y': 0.04, 'w': 0.44, 'h': 0.44},
+                {'x': 0.52, 'y': 0.04, 'w': 0.44, 'h': 0.44},
+                {'x': 0.04, 'y': 0.52, 'w': 0.44, 'h': 0.44},
+                {'x': 0.52, 'y': 0.52, 'w': 0.44, 'h': 0.44}
+            ],
+            'six_grid': [
+                {'x': 0.04, 'y': 0.04, 'w': 0.44, 'h': 0.28},
+                {'x': 0.52, 'y': 0.04, 'w': 0.44, 'h': 0.28},
+                {'x': 0.04, 'y': 0.36, 'w': 0.44, 'h': 0.28},
+                {'x': 0.52, 'y': 0.36, 'w': 0.44, 'h': 0.28},
+                {'x': 0.04, 'y': 0.68, 'w': 0.44, 'h': 0.28},
+                {'x': 0.52, 'y': 0.68, 'w': 0.44, 'h': 0.28}
+            ]
+        }
+
+        if layout not in layouts:
+            layout = 'full'
+
+        slot_defs = layouts[layout]
+        slots_per_page = len(slot_defs)
+        total_images = len(images_base64)
+
+        if output_type == 'image' and total_images > slots_per_page:
+            logger.info("拼图导出图片模式：超过版位的图片将被忽略")
+            images_base64 = images_base64[:slots_per_page]
+            captions = captions[:slots_per_page]
+            total_images = len(images_base64)
+
+        page_images = []
+        warnings = []
+
+        # 分页处理（用于PDF多页）
+        chunk_start = 0
+        page_index = 0
+        while chunk_start < total_images:
+            chunk_end = min(chunk_start + slots_per_page, total_images)
+            chunk = images_base64[chunk_start:chunk_end]
+            chunk_captions = captions[chunk_start:chunk_end] if captions else []
+
+            canvas = Image.new('RGB', (A4_WIDTH, A4_HEIGHT), background_color)
+            draw = ImageDraw.Draw(canvas)
+
+            for idx, img_b64 in enumerate(chunk):
+                try:
+                    # 处理dataURL
+                    if ',' in img_b64:
+                        img_b64 = img_b64.split(',', 1)[1]
+                    img_bytes = base64.b64decode(img_b64)
+                    img = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+
+                    slot = slot_defs[idx]
+                    x = int(slot['x'] * A4_WIDTH)
+                    y = int(slot['y'] * A4_HEIGHT)
+                    w = int(slot['w'] * A4_WIDTH)
+                    h = int(slot['h'] * A4_HEIGHT)
+
+                    # 为描述预留空间
+                    img_h = h - caption_height
+                    if img_h <= 0:
+                        img_h = h
+
+                    # 等比缩放并居中
+                    scale = min(w / img.width, img_h / img.height)
+                    new_w = max(1, int(img.width * scale))
+                    new_h = max(1, int(img.height * scale))
+                    img_resized = img.resize((new_w, new_h), resample=Image.LANCZOS)
+                    paste_x = x + (w - new_w) // 2
+                    paste_y = y + (img_h - new_h) // 2
+                    canvas.paste(img_resized, (paste_x, paste_y))
+
+                    # 描述文字
+                    caption = ''
+                    if idx < len(chunk_captions):
+                        caption = (chunk_captions[idx] or '')[:15]
+                    if caption:
+                        text_w, text_h = draw.textsize(caption, font=caption_font)
+                        text_x = x + (w - text_w) // 2
+                        text_y = y + img_h + (caption_height - text_h) // 2
+                        draw.text((text_x, text_y), caption, font=caption_font, fill=caption_color)
+
+                except Exception as e:
+                    logger.warning(f"处理第{idx+1}张图片失败: {e}")
+                    warnings.append(f"第{idx+1}张图片处理失败: {e}")
+                    continue
+
+            page_images.append(canvas)
+            chunk_start = chunk_end
+            page_index += 1
+
+        if not page_images:
+            return jsonify({'error': '图片处理失败，请检查上传的图片格式'}), 400
+
+        timestamp = int(time.time() * 1000)
+        if output_type == 'pdf':
+            output_filename = f"collage_{timestamp}.pdf"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+
+            pdf_doc = fitz.open()
+            for page_img in page_images:
+                img_bytes = io.BytesIO()
+                page_img.save(img_bytes, format='JPEG', quality=90, optimize=True)
+                img_bytes.seek(0)
+                page = pdf_doc.new_page(width=A4_WIDTH, height=A4_HEIGHT)
+                page.insert_image(fitz.Rect(0, 0, A4_WIDTH, A4_HEIGHT), stream=img_bytes.getvalue())
+            pdf_doc.save(output_path, garbage=4, deflate=True)
+            pdf_doc.close()
+            result_format = 'pdf'
+        else:
+            # 单页图片输出（使用第一页）
+            output_filename = f"collage_{timestamp}.jpg"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+            page_images[0].save(output_path, format='JPEG', quality=90, optimize=True)
+            result_format = 'jpg'
+
+        output_size = os.path.getsize(output_path)
+        elapsed_time = time.time() - start_time
+
+        logger.info(f"拼图完成: {output_filename}, 页数: {len(page_images)}, 耗时: {elapsed_time:.2f}s, 大小: {output_size/1024:.1f}KB")
+
+        return jsonify({
+            'success': True,
+            'filename': output_filename,
+            'url': f'/download/{output_filename}',
+            'format': result_format,
+            'pages': len(page_images),
+            'file_size': output_size,
+            'elapsed_time': round(elapsed_time, 2),
+            'warning': warnings if warnings else None
+        })
+
+    except Exception as e:
+        logger.error(f"拼图失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'拼图失败: {str(e)}'}), 500
+
+
 @app.route('/pdf/arrange/generate', methods=['POST'])
 def arrange_generate_pdf():
     """
@@ -1564,6 +1781,835 @@ def print_longimage():
         return jsonify({'error': f'处理失败: {str(e)}'}), 500
 
 
+@app.route('/file/to-grayscale', methods=['POST'])
+def convert_to_grayscale():
+    """
+    将PDF或图片转换为黑白/灰度图
+    支持两种模式：
+    1. gray - 仅去除彩色（灰度图）
+    2. bw - 转换为白底黑字（二值化）
+    """
+    try:
+        # 检查文件
+        if 'file' not in request.files:
+            return jsonify({'error': '未上传文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '文件名为空'}), 400
+        
+        # 获取参数
+        mode = request.form.get('mode', 'gray')  # 'gray' 或 'bw'
+        if mode not in ['gray', 'bw']:
+            mode = 'gray'
+        
+        start_time = time.time()
+        
+        # 保存上传的文件
+        filename = secure_filename(file.filename)
+        file_ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+        upload_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4()}_{filename}")
+        file.save(upload_path)
+        
+        logger.info(f"开始转换黑白: {filename}, 模式: {mode}")
+        
+        # 判断文件类型
+        is_pdf = file_ext == 'pdf'
+        
+        if is_pdf:
+            # 处理PDF文件
+            doc = fitz.open(upload_path)
+            total_pages = len(doc)
+            
+            # 限制页数
+            if total_pages > 20:
+                doc.close()
+                os.remove(upload_path)
+                return jsonify({'error': f'PDF页数超过20页（当前{total_pages}页），请使用文件拆分功能'}), 400
+            
+            # 创建输出PDF
+            output_pdf = fitz.open()
+            
+            for page_num in range(total_pages):
+                page = doc[page_num]
+                
+                # 使用超高分辨率渲染（确保文字清晰）
+                # 白底黑字模式使用更高的DPI以获得最佳效果
+                if mode == 'bw':
+                    zoom_factor = 4  # 288 DPI，高质量
+                else:
+                    zoom_factor = 3  # 216 DPI，灰度模式
+                
+                mat = fitz.Matrix(zoom_factor, zoom_factor)
+                pix = page.get_pixmap(matrix=mat, colorspace=fitz.csGRAY, alpha=False)
+                
+                # 获取原始页面尺寸
+                orig_width = page.rect.width
+                orig_height = page.rect.height
+                
+                # 如果是黑白模式，进行二值化处理
+                if mode == 'bw':
+                    # 使用PIL进行二值化
+                    img = Image.frombytes("L", [pix.width, pix.height], pix.samples)
+                    
+                    # OTSU自动阈值
+                    import numpy as np
+                    img_array = np.array(img)
+                    hist, _ = np.histogram(img_array.flatten(), 256, [0, 256])
+                    total = img_array.size
+                    sum_total = np.sum(np.arange(256) * hist)
+                    sum_bg = 0
+                    weight_bg = 0
+                    max_variance = 0
+                    threshold = 0
+                    
+                    for i in range(256):
+                        weight_bg += hist[i]
+                        if weight_bg == 0:
+                            continue
+                        weight_fg = total - weight_bg
+                        if weight_fg == 0:
+                            break
+                        sum_bg += i * hist[i]
+                        mean_bg = sum_bg / weight_bg
+                        mean_fg = (sum_total - sum_bg) / weight_fg
+                        variance = weight_bg * weight_fg * (mean_bg - mean_fg) ** 2
+                        if variance > max_variance:
+                            max_variance = variance
+                            threshold = i
+                    
+                    # 稍微降低阈值让字体更粗
+                    adjusted_threshold = max(0, threshold - 10)
+                    img = img.point(lambda x: 255 if x > adjusted_threshold else 0, '1')
+                    img = img.convert('L')
+                    
+                    # 保存为临时PNG文件（高质量）
+                    temp_img_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_bw_{uuid.uuid4()}.png")
+                    img.save(temp_img_path, format='PNG', compress_level=0, dpi=(zoom_factor * 72, zoom_factor * 72))
+                    
+                    # 创建新页面（保持原始尺寸）
+                    new_page = output_pdf.new_page(width=orig_width, height=orig_height)
+                    
+                    # 插入图片，指定DPI信息
+                    new_page.insert_image(
+                        fitz.Rect(0, 0, orig_width, orig_height),
+                        filename=temp_img_path
+                    )
+                    
+                    # 删除临时文件
+                    try:
+                        os.remove(temp_img_path)
+                    except:
+                        pass
+                else:
+                    # 灰度模式：直接使用pixmap
+                    new_page = output_pdf.new_page(width=orig_width, height=orig_height)
+                    
+                    # 保存pixmap为临时PNG
+                    temp_img_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_gray_{uuid.uuid4()}.png")
+                    pix.save(temp_img_path)
+                    
+                    # 插入图片
+                    new_page.insert_image(
+                        fitz.Rect(0, 0, orig_width, orig_height),
+                        filename=temp_img_path
+                    )
+                    
+                    # 删除临时文件
+                    try:
+                        os.remove(temp_img_path)
+                    except:
+                        pass
+                
+                pix = None  # 释放内存
+            
+            doc.close()
+            
+            # 保存输出PDF（使用最高质量设置）
+            output_filename = f"grayscale_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.pdf"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+            # 使用deflate压缩但不降低图片质量
+            # garbage=4 进行垃圾回收，deflate=True 压缩但保持质量
+            output_pdf.save(
+                output_path, 
+                garbage=4,        # 垃圾回收
+                deflate=True,     # 压缩
+                no_new_id=True    # 不生成新ID，保持稳定性
+            )
+            output_pdf.close()
+            
+        else:
+            # 处理图片文件
+            img = Image.open(upload_path)
+            
+            # 转换为灰度
+            gray_img = img.convert('L')
+            
+            # 如果是黑白模式，进行二值化
+            if mode == 'bw':
+                # 使用OTSU自动阈值
+                import numpy as np
+                img_array = np.array(gray_img)
+                hist, _ = np.histogram(img_array.flatten(), 256, [0, 256])
+                total = img_array.size
+                sum_total = np.sum(np.arange(256) * hist)
+                sum_bg = 0
+                weight_bg = 0
+                max_variance = 0
+                threshold = 0
+                
+                for i in range(256):
+                    weight_bg += hist[i]
+                    if weight_bg == 0:
+                        continue
+                    weight_fg = total - weight_bg
+                    if weight_fg == 0:
+                        break
+                    sum_bg += i * hist[i]
+                    mean_bg = sum_bg / weight_bg
+                    mean_fg = (sum_total - sum_bg) / weight_fg
+                    variance = weight_bg * weight_fg * (mean_bg - mean_fg) ** 2
+                    if variance > max_variance:
+                        max_variance = variance
+                        threshold = i
+                
+                # 应用阈值（稍微降低阈值让字体更粗）
+                adjusted_threshold = max(0, threshold - 15)
+                gray_img = gray_img.point(lambda x: 255 if x > adjusted_threshold else 0, '1')
+                gray_img = gray_img.convert('L')
+            
+            # 保存输出图片
+            output_filename = f"grayscale_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.{file_ext}"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+            gray_img.save(output_path, quality=95, optimize=True)
+        
+        # 清理上传文件
+        try:
+            os.remove(upload_path)
+        except:
+            pass
+        
+        # 获取输出文件信息
+        output_size = os.path.getsize(output_path)
+        elapsed_time = time.time() - start_time
+        
+        logger.info(f"黑白转换完成: {output_filename}, 模式: {mode}, 耗时: {elapsed_time:.2f}秒")
+        
+        return jsonify({
+            'success': True,
+            'filename': output_filename,
+            'url': f'/download/{output_filename}',
+            'file_size': output_size,
+            'mode': mode,
+            'elapsed_time': round(elapsed_time, 2),
+            'pages': total_pages if is_pdf else 1
+        })
+        
+    except Exception as e:
+        logger.error(f"转换黑白失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'转换失败: {str(e)}'}), 500
+
+
+@app.route('/file/rename', methods=['POST'])
+def rename_file():
+    """
+    文件重命名功能
+    支持所有格式的文件
+    复制文件后重命名，不影响原文件
+    """
+    try:
+        # 检查是否有文件
+        if 'file' not in request.files:
+            logger.warning("重命名接口：未找到上传的文件")
+            return jsonify({'error': '请选择要重命名的文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            logger.warning("重命名接口：文件名为空")
+            return jsonify({'error': '请选择要重命名的文件'}), 400
+        
+        # 获取新文件名
+        new_filename = request.form.get('new_filename', '').strip()
+        if not new_filename:
+            logger.warning("重命名接口：新文件名为空")
+            return jsonify({'error': '请输入新的文件名'}), 400
+        
+        # 获取原始文件名和扩展名
+        original_filename = secure_filename(file.filename)
+        _, original_ext = os.path.splitext(original_filename)
+        
+        # 处理新文件名：如果用户没有提供扩展名，使用原文件的扩展名
+        if not os.path.splitext(new_filename)[1]:
+            # 新文件名没有扩展名，添加原扩展名
+            new_filename_with_ext = new_filename + original_ext
+        else:
+            # 新文件名已有扩展名，直接使用
+            new_filename_with_ext = new_filename
+        
+        # 确保文件名安全
+        safe_new_filename = secure_filename(new_filename_with_ext)
+        
+        # 生成唯一的文件名（避免冲突）
+        timestamp = int(time.time() * 1000)
+        unique_filename = f"{timestamp}_{safe_new_filename}"
+        
+        # 保存上传的文件到临时位置
+        temp_original_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_{timestamp}_{original_filename}")
+        file.save(temp_original_path)
+        
+        logger.info(f"文件重命名: {original_filename} -> {safe_new_filename}")
+        
+        # 复制并重命名文件
+        renamed_file_path = os.path.join(app.config['CONVERTED_FOLDER'], unique_filename)
+        shutil.copy2(temp_original_path, renamed_file_path)
+        
+        # 删除临时文件
+        try:
+            os.remove(temp_original_path)
+        except Exception as e:
+            logger.warning(f"删除临时文件失败: {e}")
+        
+        # 获取文件信息
+        file_size = os.path.getsize(renamed_file_path)
+        file_size_mb = file_size / (1024 * 1024)
+        
+        # 返回结果
+        result = {
+            'success': True,
+            'message': '文件重命名成功',
+            'original_name': original_filename,
+            'new_name': safe_new_filename,
+            'download_filename': unique_filename,
+            'file_size': file_size,
+            'file_size_mb': round(file_size_mb, 2)
+        }
+        
+        logger.info(f"文件重命名成功: {unique_filename} ({file_size_mb:.2f}MB)")
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"文件重命名失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'文件重命名失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/add-page-numbers', methods=['POST'])
+def add_page_numbers():
+    """
+    为PDF添加页码功能
+    支持设置页码位置、样式、大小、边距、颜色、起始页码
+    高性能、高质量、快速处理
+    """
+    try:
+        start_time = time.time()
+        
+        # 检查是否有文件
+        if 'file' not in request.files:
+            logger.warning("添加页码接口：未找到上传的文件")
+            return jsonify({'error': '请选择要添加页码的PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            logger.warning("添加页码接口：文件名为空")
+            return jsonify({'error': '请选择要添加页码的PDF文件'}), 400
+        
+        # 检查文件大小（200MB限制）
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > 200 * 1024 * 1024:
+            return jsonify({'error': '文件大小不能超过200MB'}), 400
+        
+        # 获取参数
+        position = request.form.get('position', 'bottom_center')  # 位置：top_left, top_center, top_right, bottom_left, bottom_center, bottom_right
+        style = request.form.get('style', 'simple')  # 样式：simple(1,2,3), fraction(1/10,2/10), roman(i,ii,iii)
+        font_size = int(request.form.get('font_size', '12'))
+        margin = int(request.form.get('margin', '20'))  # 边距（像素）
+        color = request.form.get('color', '#000000')  # 颜色，格式：#RRGGBB
+        start_page = int(request.form.get('start_page', '1'))  # 从第几页开始添加页码
+        
+        # 验证参数
+        if font_size < 1 or font_size > 200:
+            return jsonify({'error': '字体大小必须在1-200之间'}), 400
+        if margin < 0 or margin > 200:
+            return jsonify({'error': '边距必须在0-200之间'}), 400
+        if start_page < 1:
+            return jsonify({'error': '起始页码必须大于0'}), 400
+        
+        # 解析颜色
+        try:
+            color_rgb = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))  # #RRGGBB -> (R, G, B)
+            color_normalized = tuple(c / 255.0 for c in color_rgb)  # 归一化到0-1
+        except:
+            color_normalized = (0, 0, 0)  # 默认黑色
+        
+        # 保存上传的文件
+        timestamp = int(time.time() * 1000)
+        original_filename = secure_filename(file.filename)
+        temp_input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_pagenum_{timestamp}_{original_filename}")
+        file.save(temp_input_path)
+        
+        logger.info(f"开始添加页码: {original_filename}, 位置={position}, 样式={style}, 大小={font_size}, 起始页={start_page}")
+        
+        # 打开PDF
+        doc = fitz.open(temp_input_path)
+        total_pages = len(doc)
+        
+        if start_page > total_pages:
+            doc.close()
+            os.remove(temp_input_path)
+            return jsonify({'error': f'起始页码({start_page})不能大于总页数({total_pages})'}), 400
+        
+        # 遍历每一页添加页码
+        for page_num in range(total_pages):
+            page = doc[page_num]
+            rect = page.rect
+            
+            # 只从start_page开始添加页码
+            if page_num + 1 < start_page:
+                continue
+            
+            # 计算页码文本（从start_page开始计数，从1开始）
+            # 例如：如果start_page=3，那么第3页显示页码1，第4页显示页码2，以此类推
+            actual_page_num = (page_num + 1) - start_page + 1
+            # 计算实际需要添加页码的总页数（用于样式中的总页数显示）
+            actual_total_pages = total_pages - start_page + 1
+            page_text = format_page_number(actual_page_num, actual_total_pages, style)
+            
+            # 计算页码位置
+            if position == 'top_left':
+                x = margin
+                y = margin
+                align = 0  # 左对齐
+            elif position == 'top_center':
+                x = rect.width / 2
+                y = margin
+                align = 1  # 居中
+            elif position == 'top_right':
+                x = rect.width - margin
+                y = margin
+                align = 2  # 右对齐
+            elif position == 'bottom_left':
+                x = margin
+                y = rect.height - margin
+                align = 0
+            elif position == 'bottom_center':
+                x = rect.width / 2
+                y = rect.height - margin
+                align = 1
+            elif position == 'bottom_right':
+                x = rect.width - margin
+                y = rect.height - margin
+                align = 2
+            else:
+                # 默认底部居中
+                x = rect.width / 2
+                y = rect.height - margin
+                align = 1
+            
+            # 使用insert_text，根据对齐方式手动计算文本位置
+            # 更精确地估算文本宽度（区分中文字符和数字/字母）
+            text_width = 0
+            for char in page_text:
+                # 判断是否为中文字符（包括中文标点）
+                if '\u4e00' <= char <= '\u9fff' or char in '，。、；：？！':
+                    text_width += font_size  # 中文字符宽度约为字体大小
+                else:
+                    text_width += font_size * 0.55  # 数字和字母宽度约为字体大小的0.55倍
+            
+            # 根据对齐方式调整x坐标
+            # 增加一些宽度余量，确保文本完全显示（避免省略号）
+            text_width_with_margin = text_width * 1.1  # 增加10%的余量
+            
+            if align == 1:  # 居中对齐
+                # x已经是中心点，需要减去文本宽度的一半
+                text_x = x - text_width_with_margin / 2
+            elif align == 2:  # 右对齐
+                # x是右边界，需要减去文本宽度
+                text_x = x - text_width_with_margin
+            else:  # 左对齐 (align == 0)
+                # x就是左边界，直接使用
+                text_x = x
+            
+            # 确保文本不超出页面边界
+            if text_x < 0:
+                text_x = 0
+            elif text_x + text_width_with_margin > rect.width:
+                text_x = rect.width - text_width_with_margin
+                if text_x < 0:
+                    text_x = 0
+            
+            # 添加页码文本
+            # 检查文本是否包含中文字符，如果包含则使用支持中文的字体
+            has_chinese = any('\u4e00' <= char <= '\u9fff' for char in page_text)
+            
+            text_inserted = False
+            
+            if has_chinese:
+                # 使用 PyMuPDF 内置的 china-ss 字体（唯一可靠支持中文的方案）
+                try:
+                    page.insert_text(
+                        (text_x, y),
+                        page_text,
+                        fontsize=font_size,
+                        color=color_normalized,
+                        fontname="china-ss"
+                    )
+                    text_inserted = True
+                    logger.info(f"成功使用china-ss字体插入页码: {page_text}, 位置: ({text_x}, {y})")
+                except Exception as e:
+                    logger.warning(f"使用china-ss字体失败: {str(e)}")
+            
+            # 如果不包含中文或china-ss失败，使用默认字体
+            if not text_inserted:
+                try:
+                    page.insert_text(
+                        (text_x, y),
+                        page_text,
+                        fontsize=font_size,
+                        color=color_normalized
+                    )
+                    text_inserted = True
+                    logger.info(f"成功使用默认字体插入页码: {page_text}, 位置: ({text_x}, {y})")
+                except Exception as e:
+                    logger.error(f"插入页码文本失败: {str(e)}, 位置: ({text_x}, {y}), 文本: {page_text}")
+                    # 不抛出异常，继续处理其他页面
+        
+        # 保存结果
+        output_filename = f"{timestamp}_pagenum_{original_filename}"
+        output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+        doc.save(output_path, garbage=4, deflate=True)  # 优化保存
+        doc.close()
+        
+        # 删除临时文件
+        try:
+            os.remove(temp_input_path)
+        except:
+            pass
+        
+        elapsed_time = time.time() - start_time
+        file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+        
+        result = {
+            'success': True,
+            'message': '页码添加成功',
+            'filename': output_filename,
+            'url': f'/download/{output_filename}',
+            'total_pages': total_pages,
+            'pages_with_numbers': total_pages - start_page + 1,
+            'file_size': os.path.getsize(output_path),
+            'file_size_mb': round(file_size_mb, 2),
+            'elapsed_time': round(elapsed_time, 2)
+        }
+        
+        logger.info(f"页码添加成功: {output_filename}, 耗时{elapsed_time:.2f}秒, 大小{file_size_mb:.2f}MB")
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"添加页码失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'添加页码失败: {str(e)}'}), 500
+
+
+def to_roman(n):
+    """将数字转换为罗马数字"""
+    val = [
+        1000, 900, 500, 400,
+        100, 90, 50, 40,
+        10, 9, 5, 4,
+        1
+    ]
+    syb = [
+        "M", "CM", "D", "CD",
+        "C", "XC", "L", "XL",
+        "X", "IX", "V", "IV",
+        "I"
+    ]
+    roman_num = ''
+    i = 0
+    while n > 0:
+        for _ in range(n // val[i]):
+            roman_num += syb[i]
+            n -= val[i]
+        i += 1
+    return roman_num
+
+
+def to_chinese_number(n):
+    """将数字转换为中文数字（第一页、第二页等）"""
+    chinese_digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十']
+    
+    if n <= 10:
+        return '第' + chinese_digits[n] + '页'
+    elif n <= 99:
+        tens = n // 10
+        ones = n % 10
+        if tens == 1:
+            if ones == 0:
+                return '第十页'
+            else:
+                return '第十' + chinese_digits[ones] + '页'
+        else:
+            if ones == 0:
+                return '第' + chinese_digits[tens] + '十页'
+            else:
+                return '第' + chinese_digits[tens] + '十' + chinese_digits[ones] + '页'
+    else:
+        # 超过99页，使用数字
+        return '第' + str(n) + '页'
+
+
+def format_page_number(page_num, total_pages, style):
+    """
+    根据样式格式化页码文本
+    
+    样式选项：
+    1. chinese_first: 第1页
+    2. chinese_fraction: 第1/20页
+    3. chinese_total: 第1页,共20页
+    4. simple: 1
+    5. dash: -1-
+    6. fraction: 1/20
+    7. page_en: Page 1
+    8. page_dot: P.1
+    """
+    if style == 'chinese_first':
+        return f"第{page_num}页"
+    elif style == 'chinese_fraction':
+        return f"第{page_num}/{total_pages}页"
+    elif style == 'chinese_total':
+        return f"第{page_num}页,共{total_pages}页"
+    elif style == 'simple':
+        return str(page_num)
+    elif style == 'dash':
+        return f"-{page_num}-"
+    elif style == 'fraction':
+        return f"{page_num}/{total_pages}"
+    elif style == 'page_en':
+        return f"Page {page_num}"
+    elif style == 'page_dot':
+        return f"P.{page_num}"
+    else:
+        # 默认返回简单数字
+        return str(page_num)
+
+
+@app.route('/pdf/preview-page-number', methods=['POST'])
+def preview_page_number():
+    """
+    预览页码效果
+    返回第一页添加页码后的预览图
+    """
+    try:
+        # 检查是否有文件
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 获取参数
+        position = request.form.get('position', 'bottom_center')
+        style = request.form.get('style', 'simple')
+        font_size = int(request.form.get('font_size', '12'))
+        margin = int(request.form.get('margin', '20'))
+        color = request.form.get('color', '#000000')
+        start_page = int(request.form.get('start_page', '1'))
+        preview_page = int(request.form.get('preview_page', '1'))  # 指定预览的页码
+        
+        # 解析颜色
+        try:
+            color_rgb = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
+            color_normalized = tuple(c / 255.0 for c in color_rgb)
+        except:
+            color_normalized = (0, 0, 0)
+        
+        # 保存临时文件
+        timestamp = int(time.time() * 1000)
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_preview_{timestamp}.pdf")
+        file.save(temp_path)
+        
+        # 打开PDF
+        doc = fitz.open(temp_path)
+        if len(doc) == 0:
+            doc.close()
+            os.remove(temp_path)
+            return jsonify({'error': 'PDF文件为空'}), 400
+        
+        total_pages = len(doc)
+        
+        # 验证预览页码
+        if preview_page < 1 or preview_page > total_pages:
+            preview_page = 1
+        
+        # 处理指定页面（预览）
+        page = doc[preview_page - 1]  # 转换为0-based索引
+        rect = page.rect
+        
+        # 计算页码文本（预览时总是显示页码，方便预览效果）
+        # 如果预览页小于起始页，显示预览页的实际页码；否则显示从起始页开始的页码
+        if preview_page >= start_page:
+            # 计算实际页码（从start_page开始计数，从1开始）
+            actual_page_num = preview_page - start_page + 1
+            # 计算实际需要添加页码的总页数（用于样式中的总页数显示）
+            actual_total_pages = total_pages - start_page + 1
+            page_text = format_page_number(actual_page_num, actual_total_pages, style)
+        else:
+            # 预览页小于起始页，显示预览页的实际页码（用于预览效果）
+            page_text = format_page_number(preview_page, total_pages, style)
+        
+        # 总是添加页码（预览时）
+        if True:  # 预览时总是显示页码
+            
+            # 计算位置和对齐方式
+            if position == 'top_left':
+                x = margin
+                y = margin
+                align = 0  # 左对齐
+            elif position == 'top_center':
+                x = rect.width / 2
+                y = margin
+                align = 1  # 居中
+            elif position == 'top_right':
+                x = rect.width - margin
+                y = margin
+                align = 2  # 右对齐
+            elif position == 'bottom_left':
+                x = margin
+                y = rect.height - margin
+                align = 0
+            elif position == 'bottom_center':
+                x = rect.width / 2
+                y = rect.height - margin
+                align = 1
+            elif position == 'bottom_right':
+                x = rect.width - margin
+                y = rect.height - margin
+                align = 2
+            else:
+                x = rect.width / 2
+                y = rect.height - margin
+                align = 1
+            
+            # 使用insert_text，根据对齐方式手动计算文本位置
+            # 更精确地估算文本宽度（区分中文字符和数字/字母）
+            # 对于数字和字母，平均宽度约为字体大小的0.5-0.6倍
+            # 对于中文，平均宽度约为字体大小
+            text_width = 0
+            for char in page_text:
+                # 判断是否为中文字符（包括中文标点）
+                if '\u4e00' <= char <= '\u9fff' or char in '，。、；：？！':
+                    text_width += font_size  # 中文字符宽度约为字体大小
+                else:
+                    text_width += font_size * 0.55  # 数字和字母宽度约为字体大小的0.55倍
+            text_height = font_size * 1.2  # 文本高度
+            
+            # 根据对齐方式调整x坐标
+            # 增加一些宽度余量，确保文本完全显示（避免省略号）
+            text_width_with_margin = text_width * 1.1  # 增加10%的余量
+            
+            if align == 1:  # 居中对齐
+                # x已经是中心点，需要减去文本宽度的一半
+                text_x = x - text_width_with_margin / 2
+            elif align == 2:  # 右对齐
+                # x是右边界，需要减去文本宽度
+                text_x = x - text_width_with_margin
+            else:  # 左对齐 (align == 0)
+                # x就是左边界，直接使用
+                text_x = x
+            
+            # 确保文本不超出页面边界
+            if text_x < 0:
+                text_x = 0
+            elif text_x + text_width_with_margin > rect.width:
+                text_x = rect.width - text_width_with_margin
+                if text_x < 0:
+                    text_x = 0
+            
+            # 添加页码文本
+            # 检查文本是否包含中文字符，如果包含则使用支持中文的字体
+            has_chinese = any('\u4e00' <= char <= '\u9fff' for char in page_text)
+            
+            text_inserted = False
+            
+            if has_chinese:
+                # 使用 PyMuPDF 内置的 china-ss 字体（唯一可靠支持中文的方案）
+                try:
+                    page.insert_text(
+                        (text_x, y),
+                        page_text,
+                        fontsize=font_size,
+                        color=color_normalized,
+                        fontname="china-ss"
+                    )
+                    text_inserted = True
+                    logger.info(f"成功使用china-ss字体插入页码: {page_text}, 位置: ({text_x}, {y})")
+                except Exception as e:
+                    logger.warning(f"使用china-ss字体失败: {str(e)}")
+            
+            # 如果不包含中文或china-ss失败，使用默认字体
+            if not text_inserted:
+                try:
+                    page.insert_text(
+                        (text_x, y),
+                        page_text,
+                        fontsize=font_size,
+                        color=color_normalized
+                    )
+                    text_inserted = True
+                    logger.info(f"成功使用默认字体插入页码: {page_text}, 位置: ({text_x}, {y})")
+                except Exception as e:
+                    logger.error(f"插入页码文本失败: {str(e)}, 位置: ({text_x}, {y}), 文本: {page_text}")
+                    # 不抛出异常，继续处理其他页面
+            
+            # 在页码周围绘制红色矩形框（只包住页码，不包整个页面）
+            # 矩形框内边距（小一点，更紧凑）
+            padding = 3  # 矩形框内边距
+            
+            # 计算页码文本的精确边界框
+            # PDF坐标系：y=0在底部，文本的y坐标是基线位置
+            # 文本从基线向上延伸，所以矩形框的y0应该在y-text_height，y1在y附近
+            rect_x0 = text_x - padding
+            rect_y0 = y - text_height - padding  # 文本顶部
+            rect_x1 = text_x + text_width + padding
+            rect_y1 = y + padding  # 文本底部（基线稍微向下一点）
+            
+            # 确保矩形框坐标有效（不超出页面边界）
+            rect_x0 = max(0, rect_x0)
+            rect_y0 = max(0, rect_y0)
+            rect_x1 = min(rect.width, rect_x1)
+            rect_y1 = min(rect.height, rect_y1)
+            
+            # 绘制红色矩形框（只包住页码）
+            page_num_rect = fitz.Rect(rect_x0, rect_y0, rect_x1, rect_y1)
+            page.draw_rect(page_num_rect, color=(1, 0, 0), width=2)  # 红色，线宽2
+        
+        # 渲染为图片（缩略图）
+        zoom = 1.0
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        
+        # 转换为base64
+        img_data = pix.tobytes("png")
+        img_base64 = base64.b64encode(img_data).decode('utf-8')
+        
+        doc.close()
+        os.remove(temp_path)
+        
+        return jsonify({
+            'success': True,
+            'preview': f'data:image/png;base64,{img_base64}',
+            'total_pages': total_pages
+        })
+        
+    except Exception as e:
+        logger.error(f"预览页码失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'预览失败: {str(e)}'}), 500
+
+
 @app.errorhandler(413)
 def request_entity_too_large(error):
     """文件过大错误处理"""
@@ -1575,6 +2621,1184 @@ def internal_server_error(error):
     """内部服务器错误处理"""
     logger.error(f"服务器错误: {str(error)}")
     return jsonify({'error': '服务器内部错误'}), 500
+
+
+@app.route('/pdf/crop-preview', methods=['POST'])
+def crop_preview():
+    """
+    生成PDF裁剪预览图
+    返回第一页的预览图，显示裁剪区域
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 获取参数
+        crop_type = request.form.get('crop_type', 'none')  # none, left_right, top_bottom, custom
+        crop_box = request.form.get('crop_box', None)  # JSON格式: {"x0": 0, "y0": 0, "x1": 100, "y1": 100}
+        preview_page = int(request.form.get('preview_page', '1'))
+        
+        # 保存临时文件
+        timestamp = int(time.time() * 1000)
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_crop_preview_{timestamp}.pdf")
+        file.save(temp_path)
+        
+        try:
+            # 打开PDF
+            doc = fitz.open(temp_path)
+            if len(doc) == 0:
+                doc.close()
+                os.remove(temp_path)
+                return jsonify({'error': 'PDF文件为空'}), 400
+            
+            total_pages = len(doc)
+            if preview_page < 1 or preview_page > total_pages:
+                preview_page = 1
+            
+            page = doc[preview_page - 1]
+            rect = page.rect
+            
+            # 生成纯净的预览图（不绘制任何裁剪框）
+            # 裁剪框和分隔线将在前端通过 CSS 实现
+            preview_page_obj = doc[preview_page - 1]
+            
+            # 生成预览图
+            mat = fitz.Matrix(2, 2)  # 2倍缩放，提高清晰度
+            pix = preview_page_obj.get_pixmap(matrix=mat, alpha=False)
+            img_data = pix.tobytes("png")
+            img_base64 = base64.b64encode(img_data).decode('utf-8')
+            
+            doc.close()
+            os.remove(temp_path)
+            
+            return jsonify({
+                'success': True,
+                'preview': f'data:image/png;base64,{img_base64}',
+                'page_width': int(rect.width),
+                'page_height': int(rect.height),
+                'total_pages': total_pages
+            })
+            
+        except Exception as e:
+            logger.error(f"生成裁剪预览失败: {str(e)}")
+            logger.error(traceback.format_exc())
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return jsonify({'error': f'生成预览失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"裁剪预览错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/crop', methods=['POST'])
+def crop_pdf():
+    """
+    PDF页面裁剪
+    支持左右分割、上下分割、自定义裁剪
+    对所有页面执行一致操作
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 获取参数
+        crop_type = request.form.get('crop_type', 'none')  # none, left_right, top_bottom, custom
+        crop_box = request.form.get('crop_box', None)  # JSON格式: {"x0": 0, "y0": 0, "x1": 100, "y1": 100}
+        export_size = request.form.get('export_size', 'original')  # original, a4
+        
+        # 保存上传的文件
+        timestamp = int(time.time() * 1000)
+        original_filename = secure_filename(file.filename)
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{timestamp}_crop_{original_filename}")
+        file.save(input_path)
+        
+        try:
+            start_time = time.time()
+            
+            # 打开PDF
+            doc = fitz.open(input_path)
+            if len(doc) == 0:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': 'PDF文件为空'}), 400
+            
+            total_pages = len(doc)
+            logger.info(f"开始裁剪PDF: {original_filename}, 总页数: {total_pages}, 裁剪类型: {crop_type}")
+            
+            # 创建新PDF
+            new_doc = fitz.open()
+            
+            # A4尺寸（点，1点=1/72英寸）
+            A4_WIDTH = 595.276  # A4宽度
+            A4_HEIGHT = 841.890  # A4高度
+            
+            # 解析裁剪框坐标
+            base_crop_rect = None
+            if crop_box:
+                try:
+                    import json
+                    box = json.loads(crop_box)
+                    base_crop_rect = fitz.Rect(box['x0'], box['y0'], box['x1'], box['y1'])
+                    logger.info(f"使用自定义裁剪框: {base_crop_rect}")
+                except Exception as e:
+                    logger.warning(f"裁剪框参数解析失败: {str(e)}")
+            
+            # 处理每一页
+            for page_num in range(total_pages):
+                page = doc[page_num]
+                rect = page.rect
+                
+                # 确定基础裁剪区域（如果有裁剪框则使用裁剪框，否则使用整页）
+                if base_crop_rect:
+                    crop_area = base_crop_rect
+                else:
+                    crop_area = rect
+                
+                if crop_type == 'left_right':
+                    # 左右分割：在裁剪框内从中间分成两页
+                    left_rect = fitz.Rect(crop_area.x0, crop_area.y0, crop_area.x0 + crop_area.width / 2, crop_area.y1)
+                    right_rect = fitz.Rect(crop_area.x0 + crop_area.width / 2, crop_area.y0, crop_area.x1, crop_area.y1)
+                    
+                    # 创建左半页
+                    if export_size == 'a4':
+                        new_page = new_doc.new_page(width=A4_WIDTH, height=A4_HEIGHT)
+                        # 计算缩放比例以适应A4
+                        scale_x = A4_WIDTH / left_rect.width
+                        scale_y = A4_HEIGHT / left_rect.height
+                        scale = min(scale_x, scale_y)
+                        new_rect = fitz.Rect(0, 0, left_rect.width * scale, left_rect.height * scale)
+                        new_rect = new_rect.center_in(new_page.rect)
+                        new_page.show_pdf_page(new_rect, doc, page_num, clip=left_rect)
+                    else:
+                        new_page = new_doc.new_page(width=left_rect.width, height=left_rect.height)
+                        new_page.show_pdf_page(new_page.rect, doc, page_num, clip=left_rect)
+                    
+                    # 创建右半页
+                    if export_size == 'a4':
+                        new_page = new_doc.new_page(width=A4_WIDTH, height=A4_HEIGHT)
+                        scale_x = A4_WIDTH / right_rect.width
+                        scale_y = A4_HEIGHT / right_rect.height
+                        scale = min(scale_x, scale_y)
+                        new_rect = fitz.Rect(0, 0, right_rect.width * scale, right_rect.height * scale)
+                        new_rect = new_rect.center_in(new_page.rect)
+                        new_page.show_pdf_page(new_rect, doc, page_num, clip=right_rect)
+                    else:
+                        new_page = new_doc.new_page(width=right_rect.width, height=right_rect.height)
+                        new_page.show_pdf_page(new_page.rect, doc, page_num, clip=right_rect)
+                    
+                elif crop_type == 'top_bottom':
+                    # 上下分割：在裁剪框内从中间分成两页
+                    top_rect = fitz.Rect(crop_area.x0, crop_area.y0, crop_area.x1, crop_area.y0 + crop_area.height / 2)
+                    bottom_rect = fitz.Rect(crop_area.x0, crop_area.y0 + crop_area.height / 2, crop_area.x1, crop_area.y1)
+                    
+                    # 创建上半页
+                    if export_size == 'a4':
+                        new_page = new_doc.new_page(width=A4_WIDTH, height=A4_HEIGHT)
+                        scale_x = A4_WIDTH / top_rect.width
+                        scale_y = A4_HEIGHT / top_rect.height
+                        scale = min(scale_x, scale_y)
+                        new_rect = fitz.Rect(0, 0, top_rect.width * scale, top_rect.height * scale)
+                        new_rect = new_rect.center_in(new_page.rect)
+                        new_page.show_pdf_page(new_rect, doc, page_num, clip=top_rect)
+                    else:
+                        new_page = new_doc.new_page(width=top_rect.width, height=top_rect.height)
+                        new_page.show_pdf_page(new_page.rect, doc, page_num, clip=top_rect)
+                    
+                    # 创建下半页
+                    if export_size == 'a4':
+                        new_page = new_doc.new_page(width=A4_WIDTH, height=A4_HEIGHT)
+                        scale_x = A4_WIDTH / bottom_rect.width
+                        scale_y = A4_HEIGHT / bottom_rect.height
+                        scale = min(scale_x, scale_y)
+                        new_rect = fitz.Rect(0, 0, bottom_rect.width * scale, bottom_rect.height * scale)
+                        new_rect = new_rect.center_in(new_page.rect)
+                        new_page.show_pdf_page(new_rect, doc, page_num, clip=bottom_rect)
+                    else:
+                        new_page = new_doc.new_page(width=bottom_rect.width, height=bottom_rect.height)
+                        new_page.show_pdf_page(new_page.rect, doc, page_num, clip=bottom_rect)
+                    
+                elif crop_type == 'custom' or crop_type == 'none':
+                    # 自定义裁剪或不分割：直接使用裁剪框区域
+                    if export_size == 'a4':
+                        new_page = new_doc.new_page(width=A4_WIDTH, height=A4_HEIGHT)
+                        scale_x = A4_WIDTH / crop_area.width
+                        scale_y = A4_HEIGHT / crop_area.height
+                        scale = min(scale_x, scale_y)
+                        new_rect = fitz.Rect(0, 0, crop_area.width * scale, crop_area.height * scale)
+                        new_rect = new_rect.center_in(new_page.rect)
+                        new_page.show_pdf_page(new_rect, doc, page_num, clip=crop_area)
+                    else:
+                        new_page = new_doc.new_page(width=crop_area.width, height=crop_area.height)
+                        new_page.show_pdf_page(new_page.rect, doc, page_num, clip=crop_area)
+            
+            # 保存结果
+            output_filename = f"{timestamp}_crop_{original_filename}"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+            new_doc.save(output_path, garbage=4, deflate=True)
+            
+            # 获取文件大小
+            file_size = os.path.getsize(output_path)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            elapsed_time = time.time() - start_time
+            new_total_pages = len(new_doc)
+            
+            new_doc.close()
+            doc.close()
+            os.remove(input_path)
+            
+            logger.info(f"PDF裁剪成功: {output_filename}, 耗时{elapsed_time:.2f}秒, 大小{file_size_mb:.2f}MB, 原页数{total_pages}, 新页数{new_total_pages}")
+            
+            return jsonify({
+                'success': True,
+                'filename': output_filename,
+                'original_pages': total_pages,
+                'new_pages': new_total_pages,
+                'file_size': file_size,
+                'file_size_mb': round(file_size_mb, 2),
+                'elapsed_time': round(elapsed_time, 2)
+            })
+            
+        except Exception as e:
+            logger.error(f"PDF裁剪失败: {str(e)}")
+            logger.error(traceback.format_exc())
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            return jsonify({'error': f'裁剪失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"PDF裁剪错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/combine-preview', methods=['POST'])
+def combine_preview():
+    """
+    生成页面合并预览
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 获取参数
+        merge_type = request.form.get('merge_type', 'left_right')  # left_right, top_bottom
+        pair_index = request.form.get('pair_index', None)  # 指定页面对索引（按需加载）
+        left_page = request.form.get('left_page', None)  # 左边页
+        right_page = request.form.get('right_page', None)  # 右边页
+        
+        # 保存上传的文件
+        timestamp = int(time.time() * 1000)
+        original_filename = secure_filename(file.filename)
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{timestamp}_combine_preview_{original_filename}")
+        file.save(input_path)
+        
+        try:
+            # 打开PDF
+            doc = fitz.open(input_path)
+            total_pages = len(doc)
+            
+            if total_pages == 0:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': 'PDF文件为空'}), 400
+            
+            # 生成页面缩略图预览
+            previews = []
+            
+            # 如果指定了页面对，只生成该页面对的预览
+            if pair_index is not None and left_page is not None:
+                left_page_num = int(left_page)
+                right_page_num = int(right_page) if right_page and right_page != '-1' else None
+                
+                # 创建合并预览
+                left_page_obj = doc[left_page_num]
+                left_pix = left_page_obj.get_pixmap(matrix=fitz.Matrix(0.5, 0.5))
+                
+                if right_page_num is not None and right_page_num < total_pages:
+                    right_page_obj = doc[right_page_num]
+                    right_pix = right_page_obj.get_pixmap(matrix=fitz.Matrix(0.5, 0.5))
+                    
+                    # 合并两个缩略图
+                    from PIL import Image
+                    import io
+                    
+                    left_img = Image.frombytes("RGB", [left_pix.width, left_pix.height], left_pix.samples)
+                    right_img = Image.frombytes("RGB", [right_pix.width, right_pix.height], right_pix.samples)
+                    
+                    if merge_type == 'left_right':
+                        # 左右合并
+                        combined_width = left_pix.width + right_pix.width
+                        combined_height = max(left_pix.height, right_pix.height)
+                        combined_img = Image.new('RGB', (combined_width, combined_height), 'white')
+                        combined_img.paste(left_img, (0, 0))
+                        combined_img.paste(right_img, (left_pix.width, 0))
+                    else:
+                        # 上下合并
+                        combined_width = max(left_pix.width, right_pix.width)
+                        combined_height = left_pix.height + right_pix.height
+                        combined_img = Image.new('RGB', (combined_width, combined_height), 'white')
+                        combined_img.paste(left_img, (0, 0))
+                        combined_img.paste(right_img, (0, left_pix.height))
+                    
+                    # 转换为base64
+                    buffer = io.BytesIO()
+                    combined_img.save(buffer, format='JPEG', quality=85)
+                    img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                else:
+                    # 只有一页，直接使用
+                    img_base64 = base64.b64encode(left_pix.tobytes('jpeg')).decode('utf-8')
+                
+                previews.append({
+                    'pair_index': int(pair_index),
+                    'left_page': left_page_num,
+                    'right_page': right_page_num,
+                    'image': f'data:image/jpeg;base64,{img_base64}'
+                })
+                
+            else:
+                # 生成所有页面对的预览（兼容旧版本）
+                page_index = 0
+                
+                while page_index < total_pages:
+                    # 计算当前页对
+                    left_page_num = page_index
+                    right_page_num = page_index + 1 if page_index + 1 < total_pages else None
+                    
+                    # 创建合并预览
+                    left_page_obj = doc[left_page_num]
+                    left_pix = left_page_obj.get_pixmap(matrix=fitz.Matrix(0.3, 0.3))
+                    
+                    if right_page_num is not None:
+                        right_page_obj = doc[right_page_num]
+                        right_pix = right_page_obj.get_pixmap(matrix=fitz.Matrix(0.3, 0.3))
+                        
+                        # 合并两个缩略图
+                        if merge_type == 'left_right':
+                            # 左右合并
+                            combined_width = left_pix.width + right_pix.width
+                            combined_height = max(left_pix.height, right_pix.height)
+                        else:
+                            # 上下合并
+                            combined_width = max(left_pix.width, right_pix.width)
+                            combined_height = left_pix.height + right_pix.height
+                        
+                        # 创建新的pixmap
+                        from PIL import Image
+                        import io
+                        
+                        left_img = Image.frombytes("RGB", [left_pix.width, left_pix.height], left_pix.samples)
+                        right_img = Image.frombytes("RGB", [right_pix.width, right_pix.height], right_pix.samples)
+                        
+                        if merge_type == 'left_right':
+                            combined_img = Image.new('RGB', (combined_width, combined_height), 'white')
+                            combined_img.paste(left_img, (0, 0))
+                            combined_img.paste(right_img, (left_pix.width, 0))
+                        else:
+                            combined_img = Image.new('RGB', (combined_width, combined_height), 'white')
+                            combined_img.paste(left_img, (0, 0))
+                            combined_img.paste(right_img, (0, left_pix.height))
+                        
+                        # 转换为base64
+                        buffer = io.BytesIO()
+                        combined_img.save(buffer, format='JPEG', quality=85)
+                        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                    else:
+                        # 只有一页，直接使用
+                        img_base64 = base64.b64encode(left_pix.tobytes('jpeg')).decode('utf-8')
+                    
+                    previews.append({
+                        'pair_index': len(previews),
+                        'left_page': left_page_num,
+                        'right_page': right_page_num,
+                        'image': f'data:image/jpeg;base64,{img_base64}'
+                    })
+                    
+                    page_index += 2
+            
+            doc.close()
+            os.remove(input_path)
+            
+            return jsonify({
+                'success': True,
+                'total_pages': total_pages,
+                'previews': previews
+            })
+            
+        except Exception as e:
+            logger.error(f"生成合并预览失败: {str(e)}")
+            logger.error(traceback.format_exc())
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            return jsonify({'error': f'生成预览失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"合并预览错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/combine-pages', methods=['POST'])
+def combine_pages():
+    """
+    PDF页面合并
+    支持左右合并、上下合并
+    可设置独立页、旋转页面
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 获取参数
+        merge_type = request.form.get('merge_type', 'left_right')  # left_right, top_bottom
+        merge_plan_json = request.form.get('merge_plan', '[]')  # JSON数组
+        
+        # 解析合并计划
+        import json
+        merge_plan = json.loads(merge_plan_json)
+        
+        # 保存上传的文件
+        timestamp = int(time.time() * 1000)
+        original_filename = secure_filename(file.filename)
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{timestamp}_combine_{original_filename}")
+        file.save(input_path)
+        
+        try:
+            start_time = time.time()
+            
+            # 打开PDF
+            doc = fitz.open(input_path)
+            total_pages = len(doc)
+            
+            if total_pages == 0:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': 'PDF文件为空'}), 400
+            
+            logger.info(f"开始合并PDF: {original_filename}, 总页数: {total_pages}, 合并类型: {merge_type}")
+            
+            # 创建新PDF
+            new_doc = fitz.open()
+            
+            # 根据合并计划处理页面
+            for plan_item in merge_plan:
+                left_page_num = plan_item.get('left_page')
+                right_page_num = plan_item.get('right_page')
+                is_independent = plan_item.get('is_independent', False)
+                left_rotation = plan_item.get('left_rotation', 0)
+                right_rotation = plan_item.get('right_rotation', 0)
+                
+                if is_independent:
+                    # 设置为独立页，分别添加
+                    if left_page_num is not None:
+                        page = doc[left_page_num]
+                        new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
+                        new_page.show_pdf_page(new_page.rect, doc, left_page_num, rotate=left_rotation)
+                    
+                    if right_page_num is not None:
+                        page = doc[right_page_num]
+                        new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
+                        new_page.show_pdf_page(new_page.rect, doc, right_page_num, rotate=right_rotation)
+                else:
+                    # 合并页面
+                    if left_page_num is not None and right_page_num is not None:
+                        left_page = doc[left_page_num]
+                        right_page = doc[right_page_num]
+                        
+                        # 获取旋转后的页面尺寸
+                        left_rect = left_page.rect
+                        right_rect = right_page.rect
+                        
+                        if merge_type == 'left_right':
+                            # 左右合并
+                            new_width = left_rect.width + right_rect.width
+                            new_height = max(left_rect.height, right_rect.height)
+                            new_page = new_doc.new_page(width=new_width, height=new_height)
+                            
+                            # 放置左页
+                            left_target = fitz.Rect(0, 0, left_rect.width, left_rect.height)
+                            new_page.show_pdf_page(left_target, doc, left_page_num, rotate=left_rotation)
+                            
+                            # 放置右页
+                            right_target = fitz.Rect(left_rect.width, 0, new_width, right_rect.height)
+                            new_page.show_pdf_page(right_target, doc, right_page_num, rotate=right_rotation)
+                        else:
+                            # 上下合并
+                            new_width = max(left_rect.width, right_rect.width)
+                            new_height = left_rect.height + right_rect.height
+                            new_page = new_doc.new_page(width=new_width, height=new_height)
+                            
+                            # 放置上页（左页）
+                            top_target = fitz.Rect(0, 0, left_rect.width, left_rect.height)
+                            new_page.show_pdf_page(top_target, doc, left_page_num, rotate=left_rotation)
+                            
+                            # 放置下页（右页）
+                            bottom_target = fitz.Rect(0, left_rect.height, right_rect.width, new_height)
+                            new_page.show_pdf_page(bottom_target, doc, right_page_num, rotate=right_rotation)
+                    elif left_page_num is not None:
+                        # 只有左页
+                        page = doc[left_page_num]
+                        new_page = new_doc.new_page(width=page.rect.width, height=page.rect.height)
+                        new_page.show_pdf_page(new_page.rect, doc, left_page_num, rotate=left_rotation)
+            
+            # 保存PDF
+            output_filename = f"{timestamp}_combined_{original_filename}"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+            new_doc.save(output_path, garbage=4, deflate=True)
+            
+            # 获取文件大小
+            file_size = os.path.getsize(output_path)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            elapsed_time = time.time() - start_time
+            new_total_pages = len(new_doc)
+            
+            new_doc.close()
+            doc.close()
+            os.remove(input_path)
+            
+            logger.info(f"PDF合并成功: {output_filename}, 耗时{elapsed_time:.2f}秒, 大小{file_size_mb:.2f}MB, 原页数{total_pages}, 新页数{new_total_pages}")
+            
+            return jsonify({
+                'success': True,
+                'filename': output_filename,
+                'original_pages': total_pages,
+                'new_pages': new_total_pages,
+                'file_size': file_size,
+                'file_size_mb': round(file_size_mb, 2),
+                'elapsed_time': round(elapsed_time, 2)
+            })
+            
+        except Exception as e:
+            logger.error(f"PDF合并失败: {str(e)}")
+            logger.error(traceback.format_exc())
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            return jsonify({'error': f'合并失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"PDF合并错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/watermark-password', methods=['POST'])
+def watermark_password():
+    """
+    PDF加水印/密码 - 统一接口
+    支持：仅水印、仅密码、水印+密码
+    限制：水印30页，文件50MB
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 获取功能选择
+        add_watermark = request.form.get('add_watermark', 'false') == 'true'
+        add_password = request.form.get('add_password', 'false') == 'true'
+        
+        if not add_watermark and not add_password:
+            return jsonify({'error': '请至少选择一个功能'}), 400
+        
+        # 水印参数
+        watermark_text = request.form.get('watermark_text', '水印')
+        position = request.form.get('position', 'center')
+        
+        try:
+            fontsize = int(request.form.get('fontsize', '50'))
+            color_r = float(request.form.get('color_r', '0.8'))
+            color_g = float(request.form.get('color_g', '0.8'))
+            color_b = float(request.form.get('color_b', '0.8'))
+            rotation_str = request.form.get('rotation', '45')
+            rotation = int(float(rotation_str)) if rotation_str else 45
+            opacity = float(request.form.get('opacity', '0.3'))  # 透明度 0-1
+            font_style = request.form.get('font_style', 'song')  # 字体样式
+        except ValueError as e:
+            logger.error(f"参数转换错误: {e}")
+            return jsonify({'error': '参数格式错误'}), 400
+        
+        # 密码参数
+        user_pw = request.form.get('user_password', '')
+        owner_pw = request.form.get('owner_password', '')
+        allow_print = request.form.get('allow_print', 'true') == 'true'
+        allow_copy = request.form.get('allow_copy', 'true') == 'true'
+        allow_modify = request.form.get('allow_modify', 'false') == 'true'
+        allow_annotate = request.form.get('allow_annotate', 'false') == 'true'
+        
+        if add_password and not user_pw:
+            return jsonify({'error': '请输入用户密码'}), 400
+        
+        if not owner_pw:
+            owner_pw = user_pw
+        
+        # 保存文件
+        timestamp = int(time.time() * 1000)
+        original_filename = secure_filename(file.filename)
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{timestamp}_{original_filename}")
+        file.save(input_path)
+        
+        try:
+            start_time = time.time()
+            file_size = os.path.getsize(input_path)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            if file_size_mb > 50:
+                os.remove(input_path)
+                return jsonify({'error': '文件大小超过50MB限制'}), 400
+            
+            doc = fitz.open(input_path)
+            total_pages = len(doc)
+            
+            if total_pages == 0:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': 'PDF文件为空'}), 400
+            
+            if add_watermark and total_pages > 30:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': '水印功能仅支持30页以内'}), 400
+            
+            logger.info(f"处理PDF: {original_filename}, 页数: {total_pages}, 水印: {add_watermark}, 密码: {add_password}")
+            
+            # 添加水印
+            if add_watermark and watermark_text:
+                import math
+                
+                # 字体映射
+                font_map = {
+                    'song': 'china-s',      # 宋体
+                    'hei': 'china-ss',      # 黑体
+                    'kai': 'china-s',       # 楷体（使用宋体代替）
+                    'fangsong': 'china-s',  # 仿宋（使用宋体代替）
+                }
+                fontname = font_map.get(font_style, 'china-s')
+                
+                for page_num in range(total_pages):
+                    page = doc[page_num]
+                    rect = page.rect
+                    
+                    if position == 'tile':
+                        # 平铺水印模式（支持任意角度）
+                        text_width = len(watermark_text) * fontsize * 0.7
+                        text_height = fontsize
+                        
+                        # 水印间距
+                        spacing_x = text_width + fontsize * 3
+                        spacing_y = fontsize * 4
+                        
+                        # 扩大绘制范围以覆盖旋转后的区域
+                        margin = max(rect.width, rect.height)
+                        
+                        # 使用TextWriter实现任意角度旋转
+                        y_pos = -margin
+                        row = 0
+                        while y_pos < rect.height + margin:
+                            x_offset = (spacing_x / 2) if row % 2 else 0
+                            x_pos = -margin + x_offset
+                            
+                            while x_pos < rect.width + margin:
+                                # 创建旋转矩阵
+                                angle_rad = math.radians(-rotation)  # 负号使文字逆时针旋转
+                                cos_a, sin_a = math.cos(angle_rad), math.sin(angle_rad)
+                                
+                                # 计算旋转后的位置
+                                rot_matrix = fitz.Matrix(cos_a, sin_a, -sin_a, cos_a, x_pos, y_pos)
+                                
+                                # 使用Shape绘制带旋转的文本
+                                tw = fitz.TextWriter(page.rect)
+                                tw.append((0, fontsize), watermark_text, fontsize=fontsize, font=fitz.Font(fontname))
+                                tw.write_text(page, morph=(fitz.Point(0, 0), rot_matrix), color=(color_r, color_g, color_b), opacity=opacity)
+                                
+                                x_pos += spacing_x
+                            
+                            y_pos += spacing_y
+                            row += 1
+                    else:
+                        # 单点水印模式（支持任意角度）
+                        # 计算位置
+                        if position == 'center':
+                            x, y = rect.width / 2, rect.height / 2
+                        elif position == 'top_left':
+                            x, y = rect.width * 0.15, rect.height * 0.15
+                        elif position == 'top_right':
+                            x, y = rect.width * 0.85, rect.height * 0.15
+                        elif position == 'bottom_left':
+                            x, y = rect.width * 0.15, rect.height * 0.85
+                        elif position == 'bottom_right':
+                            x, y = rect.width * 0.85, rect.height * 0.85
+                        else:
+                            x, y = rect.width / 2, rect.height / 2
+                        
+                        # 应用透明度：通过颜色混合模拟透明度
+                        if opacity < 1.0:
+                            # 将颜色与白色背景混合来模拟透明度
+                            blended_r = color_r * opacity + (1 - opacity) * 1.0
+                            blended_g = color_g * opacity + (1 - opacity) * 1.0
+                            blended_b = color_b * opacity + (1 - opacity) * 1.0
+                            final_color = (blended_r, blended_g, blended_b)
+                        else:
+                            final_color = (color_r, color_g, color_b)
+                        
+                        logger.info(f"添加水印 - 位置: {position}, 坐标: ({x:.1f}, {y:.1f}), 文字: '{watermark_text}', 角度: {rotation}°, 透明度: {opacity}, 最终颜色: RGB({final_color[0]:.2f},{final_color[1]:.2f},{final_color[2]:.2f})")
+                        
+                        # 估算文本尺寸（用于居中计算）
+                        text_width = len(watermark_text) * fontsize * 0.6  # 中文字符宽度
+                        text_height = fontsize
+                        
+                        # 将角度映射到最接近的标准角度（0, 90, 180, 270）
+                        # 因为TextWriter在单点模式下无法正常工作，统一使用insert_text
+                        if rotation < 45:
+                            standard_rotation = 0
+                        elif rotation < 135:
+                            standard_rotation = 90
+                        elif rotation < 225:
+                            standard_rotation = 180
+                        elif rotation < 315:
+                            standard_rotation = 270
+                        else:
+                            standard_rotation = 0
+                        
+                        if rotation != standard_rotation:
+                            logger.info(f"角度 {rotation}° 映射为标准角度 {standard_rotation}°")
+                        
+                        # 计算插入位置
+                        # insert_text的基准点在文本左下角
+                        if position == 'center':
+                            # 居中：需要调整使文本中心在目标位置
+                            if standard_rotation == 90 or standard_rotation == 270:
+                                # 旋转90度后，宽度和高度互换
+                                offset_x = -text_height / 2
+                                offset_y = text_width / 2
+                            else:
+                                offset_x = -text_width / 2
+                                offset_y = text_height / 2
+                            insert_x = x + offset_x
+                            insert_y = y - offset_y
+                        else:
+                            # 其他位置：直接使用目标位置
+                            insert_x = x
+                            insert_y = y
+                        
+                        logger.info(f"添加水印 - 位置: {position}, 目标: ({x:.1f}, {y:.1f}), 插入: ({insert_x:.1f}, {insert_y:.1f}), 角度: {standard_rotation}°")
+                        
+                        # 使用insert_text插入水印（可靠稳定）
+                        page.insert_text(
+                            (insert_x, insert_y),
+                            watermark_text,
+                            fontsize=fontsize,
+                            fontname=fontname,
+                            color=final_color,
+                            render_mode=0,
+                            rotate=standard_rotation
+                        )
+            
+            # 保存
+            output_filename = f"{timestamp}_output_{original_filename}"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+            
+            if add_password:
+                permissions = 0
+                if allow_print:
+                    permissions |= fitz.PDF_PERM_PRINT
+                if allow_copy:
+                    permissions |= fitz.PDF_PERM_COPY
+                if allow_modify:
+                    permissions |= fitz.PDF_PERM_MODIFY
+                if allow_annotate:
+                    permissions |= fitz.PDF_PERM_ANNOTATE
+                
+                doc.save(
+                    output_path,
+                    encryption=fitz.PDF_ENCRYPT_AES_256,
+                    user_pw=user_pw,
+                    owner_pw=owner_pw,
+                    permissions=permissions,
+                    garbage=4,
+                    deflate=True
+                )
+            else:
+                doc.save(output_path, garbage=4, deflate=True)
+            
+            output_size = os.path.getsize(output_path)
+            output_size_mb = output_size / (1024 * 1024)
+            elapsed = time.time() - start_time
+            
+            doc.close()
+            os.remove(input_path)
+            
+            logger.info(f"处理完成: {output_filename}, 耗时{elapsed:.2f}秒")
+            
+            return jsonify({
+                'success': True,
+                'filename': output_filename,
+                'total_pages': total_pages,
+                'file_size': output_size,
+                'file_size_mb': round(output_size_mb, 2),
+                'elapsed_time': round(elapsed, 2)
+            })
+            
+        except Exception as e:
+            logger.error(f"处理失败: {str(e)}")
+            logger.error(traceback.format_exc())
+            # 确保文档被关闭
+            try:
+                if 'doc' in locals():
+                    doc.close()
+            except:
+                pass
+            # 删除临时文件
+            if os.path.exists(input_path):
+                try:
+                    os.remove(input_path)
+                except Exception as remove_error:
+                    logger.warning(f"无法删除临时文件: {remove_error}")
+            return jsonify({'error': f'处理失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/remove-watermark', methods=['POST'])
+def remove_watermark():
+    """
+    PDF去水印功能
+    支持：文本水印删除、指定区域覆盖、图像水印删除
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 获取参数
+        remove_mode = request.form.get('remove_mode', 'text')  # text/area/image/auto
+        watermark_text = request.form.get('watermark_text', '')  # 要删除的水印文字
+        
+        # 区域模式参数
+        area_x = float(request.form.get('area_x', '0'))
+        area_y = float(request.form.get('area_y', '0'))
+        area_width = float(request.form.get('area_width', '0'))
+        area_height = float(request.form.get('area_height', '0'))
+        
+        # 颜色匹配参数（用于自动识别）
+        match_color = request.form.get('match_color', 'false') == 'true'
+        color_r = float(request.form.get('color_r', '0.8'))
+        color_g = float(request.form.get('color_g', '0.8'))
+        color_b = float(request.form.get('color_b', '0.8'))
+        color_tolerance = float(request.form.get('color_tolerance', '0.1'))
+        
+        # 保存文件
+        timestamp = int(time.time() * 1000)
+        original_filename = secure_filename(file.filename)
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{timestamp}_{original_filename}")
+        file.save(input_path)
+        
+        try:
+            start_time = time.time()
+            file_size = os.path.getsize(input_path)
+            file_size_mb = file_size / (1024 * 1024)
+            
+            if file_size_mb > 50:
+                os.remove(input_path)
+                return jsonify({'error': '文件大小超过50MB限制'}), 400
+            
+            doc = fitz.open(input_path)
+            total_pages = len(doc)
+            
+            if total_pages == 0:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': 'PDF文件为空'}), 400
+            
+            if total_pages > 100:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': '页数超过100页限制'}), 400
+            
+            logger.info(f"去水印: {original_filename}, 页数: {total_pages}, 模式: {remove_mode}")
+            
+            removed_count = 0
+            
+            for page_num in range(total_pages):
+                page = doc[page_num]
+                rect = page.rect
+                
+                if remove_mode == 'text' and watermark_text:
+                    # 文本水印删除模式 - 基于颜色识别水印
+                    text_dict = page.get_text("dict")
+                    
+                    watermark_rects = []
+                    for block in text_dict.get("blocks", []):
+                        if "lines" in block:
+                            for line in block["lines"]:
+                                for span in line["spans"]:
+                                    text = span.get("text", "").strip()
+                                    color = span.get("color", 0)
+                                    
+                                    # 转换颜色
+                                    if isinstance(color, int):
+                                        r = ((color >> 16) & 0xFF) / 255
+                                        g = ((color >> 8) & 0xFF) / 255
+                                        b = (color & 0xFF) / 255
+                                    else:
+                                        r, g, b = 0, 0, 0
+                                    
+                                    # 检查是否包含水印文字且是浅色（水印特征）
+                                    is_light_color = (r > 0.6 and g > 0.6 and b > 0.6)
+                                    contains_watermark = watermark_text in text
+                                    
+                                    if contains_watermark and is_light_color:
+                                        bbox = span.get("bbox")
+                                        if bbox:
+                                            watermark_rects.append(fitz.Rect(bbox))
+                                            logger.info(f"文本匹配 - 找到水印: '{text}' RGB({r:.2f},{g:.2f},{b:.2f})")
+                    
+                    logger.info(f"文本匹配 - 第{page_num+1}页找到 {len(watermark_rects)} 处水印")
+                    
+                    # 使用redact删除水印
+                    for rect in watermark_rects:
+                        page.add_redact_annot(rect)
+                        removed_count += 1
+                    
+                    if watermark_rects:
+                        page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+                    
+                elif remove_mode == 'area' and area_width > 0 and area_height > 0:
+                    # 区域覆盖模式（按比例计算实际位置）
+                    # 页面尺寸
+                    page_w = rect.width
+                    page_h = rect.height
+                    
+                    # 计算实际坐标
+                    actual_x = page_w * area_x / 100
+                    actual_y = page_h * area_y / 100
+                    actual_w = page_w * area_width / 100
+                    actual_h = page_h * area_height / 100
+                    
+                    logger.info(f"区域覆盖 - 页面尺寸: {page_w}x{page_h}")
+                    logger.info(f"区域覆盖 - 输入参数: x={area_x}%, y={area_y}%, w={area_width}%, h={area_height}%")
+                    logger.info(f"区域覆盖 - 实际坐标: x={actual_x:.1f}, y={actual_y:.1f}, w={actual_w:.1f}, h={actual_h:.1f}")
+                    
+                    # 创建覆盖区域
+                    area_rect = fitz.Rect(
+                        actual_x, actual_y,
+                        actual_x + actual_w, actual_y + actual_h
+                    )
+                    
+                    logger.info(f"区域覆盖 - Rect: {area_rect}")
+                    
+                    # 添加白色矩形覆盖（不使用redact，改用绘制白色矩形）
+                    shape = page.new_shape()
+                    shape.draw_rect(area_rect)
+                    shape.finish(color=(1, 1, 1), fill=(1, 1, 1))
+                    shape.commit()
+                    removed_count += 1
+                    
+                elif remove_mode == 'auto':
+                    # 自动识别模式：根据文本颜色特征识别水印（浅灰色）
+                    text_dict = page.get_text("dict")
+                    
+                    watermark_rects = []
+                    for block in text_dict.get("blocks", []):
+                        if "lines" in block:
+                            for line in block["lines"]:
+                                for span in line["spans"]:
+                                    span_color = span.get("color", 0)
+                                    text = span.get("text", "").strip()
+                                    
+                                    # 转换颜色值
+                                    if isinstance(span_color, int):
+                                        r = ((span_color >> 16) & 0xFF) / 255
+                                        g = ((span_color >> 8) & 0xFF) / 255
+                                        b = (span_color & 0xFF) / 255
+                                    else:
+                                        r, g, b = 0, 0, 0
+                                    
+                                    # 判断是否为浅色（可能是水印）- 颜色接近灰色
+                                    is_light_gray = (abs(r - 0.8) < 0.15 and 
+                                                    abs(g - 0.8) < 0.15 and 
+                                                    abs(b - 0.8) < 0.15)
+                                    
+                                    should_remove = False
+                                    if match_color:
+                                        # 匹配指定颜色
+                                        color_match = (
+                                            abs(r - color_r) < color_tolerance and
+                                            abs(g - color_g) < color_tolerance and
+                                            abs(b - color_b) < color_tolerance
+                                        )
+                                        should_remove = color_match
+                                    elif is_light_gray and text:
+                                        should_remove = True
+                                    
+                                    if should_remove:
+                                        bbox = span.get("bbox")
+                                        if bbox:
+                                            watermark_rects.append(fitz.Rect(bbox))
+                                            logger.info(f"自动识别 - 水印: '{text}' RGB({r:.2f},{g:.2f},{b:.2f})")
+                                            removed_count += 1
+                    
+                    logger.info(f"自动识别 - 第{page_num+1}页找到 {len(watermark_rects)} 处水印")
+                    
+                    # 使用redact删除水印
+                    for rect in watermark_rects:
+                        page.add_redact_annot(rect)
+                    
+                    if watermark_rects:
+                        page.apply_redactions(images=fitz.PDF_REDACT_IMAGE_NONE)
+                    
+                elif remove_mode == 'image':
+                    # 图像水印删除模式
+                    image_list = page.get_images()
+                    for img_index, img in enumerate(image_list):
+                        xref = img[0]
+                        # 获取图像位置
+                        img_rects = page.get_image_rects(xref)
+                        for img_rect in img_rects:
+                            # 检查图像是否覆盖大部分页面（可能是水印）
+                            img_area = img_rect.width * img_rect.height
+                            page_area = rect.width * rect.height
+                            coverage = img_area / page_area
+                            
+                            # 如果图像覆盖超过50%的页面，可能是背景水印
+                            if coverage > 0.5:
+                                page.add_redact_annot(img_rect, fill=(1, 1, 1))
+                                removed_count += 1
+                    
+                    page.apply_redactions()
+            
+            # 保存结果
+            output_filename = f"{timestamp}_no_watermark_{original_filename}"
+            output_path = os.path.join(app.config['CONVERTED_FOLDER'], output_filename)
+            doc.save(output_path, garbage=4, deflate=True)
+            
+            output_size = os.path.getsize(output_path)
+            output_size_mb = output_size / (1024 * 1024)
+            elapsed = time.time() - start_time
+            
+            doc.close()
+            os.remove(input_path)
+            
+            logger.info(f"去水印完成: {output_filename}, 移除{removed_count}处, 耗时{elapsed:.2f}秒")
+            
+            return jsonify({
+                'success': True,
+                'filename': output_filename,
+                'total_pages': total_pages,
+                'removed_count': removed_count,
+                'file_size': output_size,
+                'file_size_mb': round(output_size_mb, 2),
+                'elapsed_time': round(elapsed, 2)
+            })
+            
+        except Exception as e:
+            logger.error(f"去水印失败: {str(e)}")
+            logger.error(traceback.format_exc())
+            try:
+                if 'doc' in locals():
+                    doc.close()
+            except:
+                pass
+            if os.path.exists(input_path):
+                try:
+                    os.remove(input_path)
+                except:
+                    pass
+            return jsonify({'error': f'处理失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"去水印错误: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
+
+
+@app.route('/pdf/remove-watermark-preview', methods=['POST'])
+def remove_watermark_preview():
+    """
+    去水印预览 - 返回第一页的预览图
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '请选择PDF文件'}), 400
+        
+        # 保存文件
+        timestamp = int(time.time() * 1000)
+        original_filename = secure_filename(file.filename)
+        input_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{timestamp}_preview_{original_filename}")
+        file.save(input_path)
+        
+        try:
+            doc = fitz.open(input_path)
+            if len(doc) == 0:
+                doc.close()
+                os.remove(input_path)
+                return jsonify({'error': 'PDF文件为空'}), 400
+            
+            # 渲染第一页
+            page = doc[0]
+            zoom = 1.5
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+            
+            # 转为base64
+            img_data = pix.tobytes("jpeg")
+            img_base64 = base64.b64encode(img_data).decode()
+            
+            page_info = {
+                'width': page.rect.width,
+                'height': page.rect.height,
+                'total_pages': len(doc)
+            }
+            
+            doc.close()
+            os.remove(input_path)
+            
+            return jsonify({
+                'success': True,
+                'preview': f"data:image/jpeg;base64,{img_base64}",
+                'page_info': page_info
+            })
+            
+        except Exception as e:
+            logger.error(f"预览失败: {str(e)}")
+            if os.path.exists(input_path):
+                os.remove(input_path)
+            return jsonify({'error': f'预览失败: {str(e)}'}), 500
+            
+    except Exception as e:
+        logger.error(f"预览错误: {str(e)}")
+        return jsonify({'error': f'处理失败: {str(e)}'}), 500
 
 
 if __name__ == '__main__':
@@ -1591,10 +3815,27 @@ if __name__ == '__main__':
     logger.info("  ✓ PDF页面编排")
     logger.info("  ✓ PDF旋转")
     logger.info("  ✓ 文件转长图")
-    logger.info("  ✓ 长图打印 (NEW!)")
+    logger.info("  ✓ 长图打印")
+    logger.info("  ✓ 转黑白/灰度")
+    logger.info("  ✓ 文件重命名")
+    logger.info("  ✓ 添加页码 (NEW!)")
+    logger.info("  ✓ PDF页面裁剪 (NEW!)")
+    logger.info("  ✓ PDF页面合并 (NEW!)")
+    logger.info("  ✓ PDF加水印/密码 (NEW!)")
+    logger.info("  ✓ PDF去水印 (NEW!)")
     logger.info("========================================")
     logger.info("API端点:")
     logger.info("  GET  /health - 健康检查")
+    logger.info("  POST /pdf/add-page-numbers - 添加页码")
+    logger.info("  POST /pdf/preview-page-number - 预览页码")
+    logger.info("  POST /pdf/crop - PDF页面裁剪")
+    logger.info("  POST /pdf/crop-preview - 裁剪预览")
+    logger.info("  POST /pdf/combine-pages - PDF页面合并")
+    logger.info("  POST /pdf/combine-preview - 合并预览")
+    logger.info("  POST /pdf/watermark-password - PDF加水印/密码")
+    logger.info("  POST /pdf/remove-watermark - PDF去水印")
+    logger.info("  POST /file/rename - 文件重命名")
+    logger.info("  POST /file/to-grayscale - 转黑白/灰度")
     logger.info("  POST /longimage/print - 长图打印")
     logger.info("  POST /pdf/compress - PDF压缩")
     logger.info("  POST /pdf/arrange/* - PDF页面编排")

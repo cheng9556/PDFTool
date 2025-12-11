@@ -47,19 +47,19 @@
     <view class="card-title"><view class="title-icon icon-pdf"></view>PDF处理</view>
     <view class="menu">
       <view class="menu-item" bindtap="goPrintImage"><view class="icon icon-pdf"></view><text class="label">长图打印</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">转黑白</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">修改文件名</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-password"></view><text class="label">添加密码</text></view>
+      <view class="menu-item" bindtap="goGrayscale"><view class="icon icon-pdf"></view><text class="label">转黑白</text></view>
+      <view class="menu-item" bindtap="goRename"><view class="icon icon-pdf"></view><text class="label">修改文件名</text></view>
+      <view class="menu-item" bindtap="goPageNumber"><view class="icon icon-pages"></view><text class="label">添加页码</text></view>
     </view>
   </view>
 
   <view class="card">
     <view class="card-title"><view class="title-icon icon-pdf"></view>高级功能</view>
     <view class="menu">
-      <view class="menu-item" bindtap="todo"><view class="icon icon-split"></view><text class="label">页面分割裁剪</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-merge"></view><text class="label">页面合并</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-watermark"></view><text class="label">去水印</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-password"></view><text class="label">加水印/密码</text></view>
+      <view class="menu-item" bindtap="goCrop"><view class="icon icon-split"></view><text class="label">页面分割裁剪</text></view>
+      <view class="menu-item" bindtap="goCombine"><view class="icon icon-merge"></view><text class="label">页面合并</text></view>
+      <view class="menu-item" bindtap="goRemoveWatermark"><view class="icon icon-watermark"></view><text class="label">去水印</text></view>
+      <view class="menu-item" bindtap="goWatermark"><view class="icon icon-password"></view><text class="label">加水印/密码</text></view>
     </view>
   </view>
 
@@ -68,7 +68,7 @@
     <view class="menu">
       <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">OFD</text></view>
       <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">发票合并</text></view>
-      <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">拼图</text></view>
+      <view class="menu-item" bindtap="goCollage"><view class="icon icon-pdf"></view><text class="label">拼图</text></view>
       <view class="menu-item" bindtap="todo"><view class="icon icon-pdf"></view><text class="label">视频转长图</text></view>
     </view>
   </view>

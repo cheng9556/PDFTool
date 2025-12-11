@@ -18,9 +18,17 @@ Page({
   goArrange() { wx.navigateTo({ url: '/pages/arrange/index' }); },
   goLongImage() { wx.navigateTo({ url: '/pages/longimage/index' }); },
   goPrintImage() { wx.navigateTo({ url: '/pages/printimage/index' }); },
+  goGrayscale() { wx.navigateTo({ url: '/pages/grayscale/index' }); },
+  goRename() { wx.navigateTo({ url: '/pages/rename/index' }); },
+  goPageNumber() { wx.navigateTo({ url: '/pages/pagenumber/index' }); },
+  goCollage() { wx.navigateTo({ url: '/pages/collage/index' }); },
   goMerge() { wx.navigateTo({ url: '/pages/merge/index' }); },
   goSplit() { wx.navigateTo({ url: '/pages/split/index' }); },
   goReorder() { wx.navigateTo({ url: '/pages/pagesmanage/index' }); },
+  goCrop() { wx.navigateTo({ url: '/pages/crop/index' }); },
+  goCombine() { wx.navigateTo({ url: '/pages/combine/index' }); },
+  goWatermark() { wx.navigateTo({ url: '/pages/watermark/index' }); },
+  goRemoveWatermark() { wx.navigateTo({ url: '/pages/remove-watermark/index' }); },
   todo() { wx.showToast({ icon: 'none', title: '即将上线，敬请期待' }); }
 });
 

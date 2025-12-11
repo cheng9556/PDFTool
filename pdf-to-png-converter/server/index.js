@@ -1063,44 +1063,44 @@ app.post('/pdf/manage-pages', upload.single('pdf_file'), async (req, res) => {
     
     // Helper function to insert an image
     const insertImageToPdf = async (imageData) => {
-      let imageBuffer;
-      
+            let imageBuffer;
+            
       // Parse base64 image data
-      if (imageData.startsWith('data:')) {
+            if (imageData.startsWith('data:')) {
         // Extract base64 part (handle both data:image/png;base64, and data:image/jpeg;base64,)
-        const base64Data = imageData.split(',')[1];
-        imageBuffer = Buffer.from(base64Data, 'base64');
-      } else {
-        imageBuffer = Buffer.from(imageData, 'base64');
-      }
-      
-      // Determine image type and embed
-      let image;
-      let dims;
-      
-      // Try PNG first, then JPG
-      try {
-        image = await outDoc.embedPng(imageBuffer);
-        dims = image.scale(1);
-      } catch (pngError) {
-        try {
-          image = await outDoc.embedJpg(imageBuffer);
-          dims = image.scale(1);
-        } catch (jpgError) {
+              const base64Data = imageData.split(',')[1];
+              imageBuffer = Buffer.from(base64Data, 'base64');
+            } else {
+              imageBuffer = Buffer.from(imageData, 'base64');
+            }
+            
+            // Determine image type and embed
+            let image;
+            let dims;
+            
+            // Try PNG first, then JPG
+            try {
+              image = await outDoc.embedPng(imageBuffer);
+              dims = image.scale(1);
+            } catch (pngError) {
+              try {
+                image = await outDoc.embedJpg(imageBuffer);
+                dims = image.scale(1);
+              } catch (jpgError) {
           console.error('Failed to embed image (PNG and JPG both failed):', pngError.message, jpgError.message);
           throw new Error('Unsupported image format. Only PNG and JPG are supported.');
-        }
-      }
-      
-      // Create page with image dimensions
-      const page = outDoc.addPage([dims.width, dims.height]);
-      page.drawImage(image, {
-        x: 0,
-        y: 0,
-        width: dims.width,
-        height: dims.height
-      });
-      
+              }
+            }
+            
+            // Create page with image dimensions
+            const page = outDoc.addPage([dims.width, dims.height]);
+            page.drawImage(image, {
+              x: 0,
+              y: 0,
+              width: dims.width,
+              height: dims.height
+            });
+            
       return true;
     };
     
@@ -1132,13 +1132,13 @@ app.post('/pdf/manage-pages', upload.single('pdf_file'), async (req, res) => {
         try {
           await insertImageToPdf(insertImg.image_data);
           console.log(`✓ Inserted image at position ${insertImg.position} (before page ${pageNumber})`);
-          insertIndex++;
+            insertIndex++;
         } catch (imgError) {
           console.error(`✗ Error inserting image at position ${insertImg.position}:`, imgError.message);
           insertIndex++;
+          }
         }
-      }
-      
+        
       // Add the current page
       outDoc.addPage(copiedPages[i]);
       console.log(`✓ Added page ${pageNumber} of ${totalPages}`);

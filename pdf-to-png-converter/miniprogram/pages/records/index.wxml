@@ -1,3 +1,49 @@
-<view class="center">转换记录（占位页）</view>
+<view class="page">
+  <view class="tip-bar">
+    <text>{{tip}}</text>
+  </view>
+
+  <view class="list">
+    <block wx:for="{{records}}" wx:key="id">
+      <view class="item">
+        <view class="left" data-id="{{item.id}}" catchtap="onToggleCheckbox">
+          <view class="check {{item.isSelected ? 'checked' : ''}}"></view>
+        </view>
+        <view class="body" catchtap="onToggleCheckbox" data-id="{{item.id}}">
+          <view class="title">
+            <text class="tag">{{item.type || ''}}</text>
+            <text class="name">{{item.filename}}</text>
+          </view>
+          <view class="meta">
+            <text class="time">{{item.displayTime}}</text>
+            <text class="pages">{{item.pages}}</text>
+          </view>
+        </view>
+        <view class="arrow" catchtap="openRecord" data-id="{{item.id}}">重新下载</view>
+      </view>
+    </block>
+    <view class="empty" wx:if="{{records.length === 0}}">
+      <text>暂无记录</text>
+    </view>
+  </view>
+
+  <view class="footer">
+    <view class="summary">
+      <text wx:if="{{selectedIds.length > 0}}">已选中 {{selectedIds.length}} 条</text>
+      <text wx:else>已加载完，共{{records.length}}条记录</text>
+    </view>
+    <view class="actions">
+      <checkbox checked="{{allSelected}}" catchtap="toggleSelectAll">全选</checkbox>
+      <button class="btn-icon download {{selectedIds.length === 0 ? 'disabled' : ''}}" bindtap="downloadSelected">
+        <view class="icon-download"></view>
+        <text>下载</text>
+      </button>
+      <button class="btn-icon delete {{selectedIds.length === 0 ? 'disabled' : ''}}" bindtap="deleteSelected">
+        <view class="icon-delete"></view>
+        <text>删除</text>
+      </button>
+    </view>
+  </view>
+</view>
 
 
