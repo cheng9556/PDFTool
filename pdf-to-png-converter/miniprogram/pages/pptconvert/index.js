@@ -1,8 +1,11 @@
+// 使用全局配置
+const config = require('../../utils/config');
+
 Page({
   data: {
     // 服务地址
-    pythonServer: 'http://localhost:8789',
-    javaServer: 'http://localhost:8788',
+    pythonServer: config.pythonServer,
+    javaServer: config.javaServer,
     
     // 文件信息
     tempFilePath: '',
@@ -128,7 +131,7 @@ Page({
     this.setData({ converting: true });
     wx.showLoading({ title: 'PDF转PPT中...', mask: true });
     
-    console.log('开始PDF转PPT:', filename);
+    console.log('开始PDF转PPT:', filename, '服务器:', pythonServer);
     
     wx.uploadFile({
       url: pythonServer + '/pdf/to-ppt',
@@ -138,8 +141,21 @@ Page({
         dpi: '200',
         quality: '92'
       },
+      timeout: 300000, // 5分钟超时（300秒）
+      header: {
+        'Content-Type': 'multipart/form-data'
+      },
       success: (res) => {
         console.log('转换响应:', res.statusCode, res.data);
+        
+        if (res.statusCode !== 200) {
+          wx.showToast({
+            icon: 'none',
+            title: `服务器错误: ${res.statusCode}`,
+            duration: 3000
+          });
+          return;
+        }
         
         try {
           const data = JSON.parse(res.data);
@@ -173,18 +189,31 @@ Page({
           console.log('PDF转PPT成功:', data);
           
         } catch (err) {
-          console.error('解析响应失败:', err);
+          console.error('解析响应失败:', err, '响应内容:', res.data);
           wx.showToast({
             icon: 'none',
-            title: '解析响应失败'
+            title: '解析响应失败，请重试'
           });
         }
       },
       fail: (err) => {
         console.error('上传失败:', err);
+        
+        let errorMsg = '转换失败';
+        if (err.errMsg) {
+          if (err.errMsg.includes('ECONNRESET')) {
+            errorMsg = '连接被重置，可能是服务器超时或网络不稳定，请重试';
+          } else if (err.errMsg.includes('timeout')) {
+            errorMsg = '上传超时，文件可能过大，请稍后重试';
+          } else if (err.errMsg.includes('fail')) {
+            errorMsg = '网络请求失败，请检查网络连接';
+          }
+        }
+        
         wx.showToast({
           icon: 'none',
-          title: '转换失败，请检查服务'
+          title: errorMsg,
+          duration: 3000
         });
       },
       complete: () => {
@@ -203,14 +232,27 @@ Page({
     this.setData({ converting: true });
     wx.showLoading({ title: 'PPT转PDF中...', mask: true });
     
-    console.log('开始PPT转PDF:', filename);
+    console.log('开始PPT转PDF:', filename, '服务器:', javaServer);
     
     wx.uploadFile({
       url: javaServer + '/ppt/topdf',
       filePath: tempFilePath,
       name: 'file',
+      timeout: 300000, // 5分钟超时（300秒）
+      header: {
+        'Content-Type': 'multipart/form-data'
+      },
       success: (res) => {
         console.log('转换响应:', res.statusCode, res.data);
+        
+        if (res.statusCode !== 200) {
+          wx.showToast({
+            icon: 'none',
+            title: `服务器错误: ${res.statusCode}`,
+            duration: 3000
+          });
+          return;
+        }
         
         try {
           const data = JSON.parse(res.data);
@@ -244,18 +286,31 @@ Page({
           console.log('PPT转PDF成功:', data);
           
         } catch (err) {
-          console.error('解析响应失败:', err);
+          console.error('解析响应失败:', err, '响应内容:', res.data);
           wx.showToast({
             icon: 'none',
-            title: '解析响应失败'
+            title: '解析响应失败，请重试'
           });
         }
       },
       fail: (err) => {
         console.error('上传失败:', err);
+        
+        let errorMsg = '转换失败';
+        if (err.errMsg) {
+          if (err.errMsg.includes('ECONNRESET')) {
+            errorMsg = '连接被重置，可能是服务器超时或网络不稳定，请重试';
+          } else if (err.errMsg.includes('timeout')) {
+            errorMsg = '上传超时，文件可能过大，请稍后重试';
+          } else if (err.errMsg.includes('fail')) {
+            errorMsg = '网络请求失败，请检查网络连接';
+          }
+        }
+        
         wx.showToast({
           icon: 'none',
-          title: '转换失败，请检查服务'
+          title: errorMsg,
+          duration: 3000
         });
       },
       complete: () => {

@@ -15,13 +15,13 @@ public class JodConverterConfig {
      * 配置DocumentConverter Bean
      * 使用LocalConverter + OfficeManager实现文档转换
      */
-    @Bean
-    public DocumentConverter documentConverter(OfficeManager officeManager) {
-        return LocalConverter.builder()
-                .officeManager(officeManager)
-                .filterChain(new CalcFitToWidthFilter())
-                .build();
-    }
+//    @Bean
+//    public DocumentConverter documentConverter(OfficeManager officeManager) {
+//        return LocalConverter.builder()
+//                .officeManager(officeManager)
+//                .filterChain(new CalcFitToWidthFilter())
+//                .build();
+//    }
 }
 
 

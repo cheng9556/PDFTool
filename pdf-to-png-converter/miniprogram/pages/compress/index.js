@@ -1,5 +1,7 @@
 // pages/compress/index.js
-var serverUrl = 'http://localhost:8789';
+// 使用全局配置
+const config = require('../../utils/config');
+var serverUrl = config.pythonServer;
 
 Page({
   data: {

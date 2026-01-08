@@ -1,5 +1,7 @@
 // Python后端服务地址（pdf2docx） - 增强版
-const SERVER_URL = 'http://localhost:8789';
+// 使用全局配置
+const config = require('../../utils/config');
+const SERVER_URL = config.pythonServer;
 
 Page({
   data: {

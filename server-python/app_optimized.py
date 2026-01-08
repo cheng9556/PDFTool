@@ -2324,16 +2324,16 @@ def manage_pdf_pages():
                     image_bytes = base64.b64decode(image_data.split(',')[-1] if ',' in image_data else image_data)
                     
                     # 使用PIL打开图片
-                            from PIL import Image
-                            import io
-                            img = Image.open(io.BytesIO(image_bytes))
+                    from PIL import Image
+                    import io
+                    img = Image.open(io.BytesIO(image_bytes))
                     
                     # 转换为RGB（如果是RGBA或其他模式）
                     if img.mode != 'RGB':
-                            if img.mode == 'RGBA':
-                                rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                                rgb_img.paste(img, mask=img.split()[3])
-                                img = rgb_img
+                        if img.mode == 'RGBA':
+                            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                            rgb_img.paste(img, mask=img.split()[3])
+                            img = rgb_img
                         else:
                             img = img.convert('RGB')
                     
@@ -2431,7 +2431,7 @@ def manage_pdf_pages():
                     
                     # 将图片嵌入到PDF页面
                     # 保存图片到临时文件，使用最高质量PNG（无压缩）
-                            temp_img_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_img_{uuid.uuid4().hex[:8]}.png")
+                    temp_img_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_img_{uuid.uuid4().hex[:8]}.png")
                     # 使用最高质量保存PNG
                     # compress_level=0: 无压缩，最高质量
                     # optimize=False: 不优化，保持原始质量
@@ -2485,7 +2485,7 @@ def manage_pdf_pages():
                     
                     # 删除临时文件
                     try:
-                            os.remove(temp_img_path)
+                        os.remove(temp_img_path)
                     except:
                         pass
                     

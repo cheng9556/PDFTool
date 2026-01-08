@@ -1,5 +1,8 @@
+// 使用全局配置
+const config = require('../../utils/config');
+
 Page({
-  data: { serverUrl: 'http://localhost:8787', tempFilePath: '', filename: '', order: '' },
+  data: { serverUrl: config.pythonServer, tempFilePath: '', filename: '', order: '' }, // 注意：此页面原使用8787端口，已改为使用Python后端
   choosePdf() { wx.chooseMessageFile({ count: 1, type: 'file', extension: ['pdf'], success: (r) => this.setData({ tempFilePath: r.tempFiles[0].path, filename: r.tempFiles[0].name }) }); },
   onOrder(e) { this.setData({ order: e.detail.value }); },
   submit() {

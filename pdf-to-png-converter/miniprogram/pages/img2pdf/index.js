@@ -1,6 +1,9 @@
+// 使用全局配置
+const config = require('../../utils/config');
+
 Page({
   data: {
-    serverUrl: 'http://localhost:8788',
+    serverUrl: config.javaServer,
     images: []
   },
 

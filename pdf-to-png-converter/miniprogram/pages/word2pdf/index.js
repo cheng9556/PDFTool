@@ -1,5 +1,7 @@
 // Java后端服务地址 (JodConverter + LibreOffice)
-const SERVER_URL = 'http://localhost:8788';
+// 使用全局配置
+const config = require('../../utils/config');
+const SERVER_URL = config.javaServer;
 
 Page({
   data: {

@@ -1,7 +1,6 @@
 package com.pdftool.controller;
 
 import com.pdftool.service.ConversionService;
-import com.pdftool.service.OptimizedConversionService;
 import com.pdftool.service.EnhancedPdfToExcelService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -66,9 +65,15 @@ public class ExcelToPdfController {
             }
 
             System.out.println("开始转换: " + originalFilename);
+            System.out.println("文件大小: " + (file.getSize() / 1024) + " KB");
+            long startTime = System.currentTimeMillis();
 
             // 转换Excel到PDF
-            byte[] pdfBytes = conversionService.convertExcelToPdf(file.getBytes());
+            byte[] pdfBytes;
+            pdfBytes = conversionService.convertExcelToPdf(file.getBytes());
+            
+            long duration = System.currentTimeMillis() - startTime;
+            System.out.println("转换耗时: " + duration + " ms");
 
             // 保存PDF到临时目录
             File tempDir = new File(TEMP_DIR);
@@ -120,9 +125,15 @@ public class ExcelToPdfController {
             }
 
             System.out.println("开始转换 Word -> PDF: " + originalFilename);
+            System.out.println("文件大小: " + (file.getSize() / 1024) + " KB");
+            long startTime = System.currentTimeMillis();
 
             // 转换Word到PDF
-            byte[] pdfBytes = conversionService.convertWordToPdf(file.getBytes());
+            byte[] pdfBytes;
+            pdfBytes = conversionService.convertWordToPdf(file.getBytes());
+            
+            long duration = System.currentTimeMillis() - startTime;
+            System.out.println("转换耗时: " + duration + " ms");
 
             // 保存PDF到临时目录
             File tempDir = new File(TEMP_DIR);

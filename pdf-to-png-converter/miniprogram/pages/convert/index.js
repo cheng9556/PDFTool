@@ -1,6 +1,9 @@
+// 使用全局配置
+const config = require('../../utils/config');
+
 Page({
   data: {
-    serverUrl: 'http://localhost:8787',
+    serverUrl: config.pythonServer, // 注意：此页面原使用8787端口，已改为使用Python后端
     tempFilePath: '',
     images: []
   },

@@ -20,11 +20,18 @@ import traceback
 import re
 import shutil
 import platform
+from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     import requests
     HAS_REQUESTS = True
 except ImportError:
     HAS_REQUESTS = False
+try:
+    from pptx import Presentation
+    from pptx.util import Inches
+    HAS_PPTX = True
+except ImportError:
+    HAS_PPTX = False
 
 # 配置日志
 logging.basicConfig(
@@ -77,7 +84,7 @@ def health_check():
     return jsonify({
         'status': 'UP',
         'service': 'PDF to Word Converter (pdf2docx) - Enhanced + High Quality + Fast',
-        'version': '2.2.0',
+        'version': '3.0.0',
         'features': ['complex_format', 'images', 'page_selection', 'preview', 'premium_mode', 'fast_mode', 'multi_processing'],
         'modes': {
             'premium': '⭐高质量模式（表格+图片+样式，质量与速度平衡，推荐！）',
@@ -423,6 +430,185 @@ def convert_pdf_to_word():
         return jsonify({'error': f'处理请求失败: {str(e)}'}), 500
 
 
+@app.route('/pdf/to-ppt', methods=['POST'])
+def convert_pdf_to_ppt():
+    """
+    PDF转PPT端点
+    将PDF的每一页转换为图片，然后插入到PPT中
+    
+    参数:
+        file: PDF文件 (multipart/form-data)
+        dpi: 图片分辨率 (可选，默认200)
+        quality: 图片质量 1-100 (可选，默认92)
+        
+    返回:
+        {url, filename, size, conversion_time, pages_converted}
+    """
+    if not HAS_PPTX:
+        return jsonify({'error': 'python-pptx库未安装，无法进行PDF转PPT转换'}), 500
+    
+    try:
+        # 检查是否有文件
+        if 'file' not in request.files:
+            return jsonify({'error': '没有上传文件'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'error': '文件名为空'}), 400
+        
+        if not allowed_file(file.filename):
+            return jsonify({'error': '只支持PDF文件'}), 400
+        
+        # 获取参数
+        dpi = int(request.form.get('dpi', 200))
+        quality = int(request.form.get('quality', 92))
+        
+        # 参数验证
+        if dpi < 72 or dpi > 600:
+            dpi = 200
+        if quality < 1 or quality > 100:
+            quality = 92
+        
+        # 生成唯一文件名
+        original_filename = secure_filename(file.filename)
+        file_uuid = str(uuid.uuid4())
+        pdf_filename = f"{file_uuid}_{original_filename}"
+        ppt_filename = f"{file_uuid}_{os.path.splitext(original_filename)[0]}.pptx"
+        
+        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
+        ppt_path = os.path.join(app.config['CONVERTED_FOLDER'], ppt_filename)
+        
+        # 保存上传的PDF文件
+        file.save(pdf_path)
+        file_size = os.path.getsize(pdf_path) / 1024
+        logger.info(f"接收到PDF文件: {original_filename} ({file_size:.2f} KB)")
+        logger.info(f"转换参数: DPI={dpi}, Quality={quality}")
+        
+        # 清理旧文件
+        cleanup_old_files(app.config['UPLOAD_FOLDER'])
+        cleanup_old_files(app.config['CONVERTED_FOLDER'])
+        
+        # 开始转换
+        logger.info(f"开始转换: {original_filename} -> {ppt_filename}")
+        start_time = datetime.now()
+        
+        try:
+            # 打开PDF
+            doc = fitz.open(pdf_path)
+            total_pages = len(doc)
+            logger.info(f"PDF总页数: {total_pages}")
+            
+            # 创建PPT
+            prs = Presentation()
+            # 设置幻灯片尺寸为16:9（宽屏）
+            prs.slide_width = Inches(10)
+            prs.slide_height = Inches(7.5)
+            
+            # 临时目录存储图片
+            temp_img_dir = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_{file_uuid}")
+            os.makedirs(temp_img_dir, exist_ok=True)
+            
+            try:
+                # 转换每一页为图片并添加到PPT
+                for page_num in range(total_pages):
+                    page = doc[page_num]
+                    
+                    # 计算缩放比例（基于DPI）
+                    zoom = dpi / 72.0
+                    mat = fitz.Matrix(zoom, zoom)
+                    
+                    # 渲染页面为图片
+                    pix = page.get_pixmap(matrix=mat, alpha=False)
+                    
+                    # 保存为临时图片文件
+                    img_path = os.path.join(temp_img_dir, f"page_{page_num + 1}.jpg")
+                    pix.save(img_path)
+                    
+                    # 创建新幻灯片
+                    slide = prs.slides.add_slide(prs.slide_layouts[6])  # 空白布局
+                    
+                    # 计算图片尺寸（保持宽高比，适应幻灯片）
+                    slide_width = prs.slide_width
+                    slide_height = prs.slide_height
+                    
+                    # 获取图片尺寸
+                    img_width = pix.width
+                    img_height = pix.height
+                    img_ratio = img_width / img_height
+                    slide_ratio = slide_width / slide_height
+                    
+                    # 计算适应幻灯片的尺寸
+                    if img_ratio > slide_ratio:
+                        # 图片更宽，以宽度为准
+                        pic_width = slide_width
+                        pic_height = slide_width / img_ratio
+                    else:
+                        # 图片更高，以高度为准
+                        pic_height = slide_height
+                        pic_width = slide_height * img_ratio
+                    
+                    # 居中放置
+                    left = (slide_width - pic_width) / 2
+                    top = (slide_height - pic_height) / 2
+                    
+                    # 添加图片到幻灯片
+                    slide.shapes.add_picture(img_path, left, top, pic_width, pic_height)
+                    
+                    logger.info(f"已处理第 {page_num + 1}/{total_pages} 页")
+                
+                # 保存PPT
+                prs.save(ppt_path)
+                
+                # 清理临时图片
+                shutil.rmtree(temp_img_dir, ignore_errors=True)
+                
+            except Exception as e:
+                # 确保清理临时文件
+                shutil.rmtree(temp_img_dir, ignore_errors=True)
+                raise e
+            
+            doc.close()
+            
+            # 计算转换时间
+            conversion_time = (datetime.now() - start_time).total_seconds()
+            ppt_size = os.path.getsize(ppt_path) / 1024
+            
+            logger.info(f"转换成功: {ppt_filename}, 大小: {ppt_size:.2f} KB, 耗时: {conversion_time:.2f}s")
+            
+            # 清理PDF文件
+            try:
+                os.remove(pdf_path)
+            except:
+                pass
+            
+            # 返回下载链接
+            return jsonify({
+                'url': f'/download/{ppt_filename}',
+                'filename': ppt_filename,
+                'size': int(os.path.getsize(ppt_path)),
+                'conversion_time': f'{conversion_time:.2f}s',
+                'pages_converted': total_pages,
+                'dpi': dpi,
+                'quality': quality
+            })
+            
+        except Exception as e:
+            logger.error(f"转换失败: {str(e)}")
+            logger.error(traceback.format_exc())
+            # 清理文件
+            try:
+                os.remove(pdf_path)
+            except:
+                pass
+            return jsonify({'error': f'转换失败: {str(e)}'}), 500
+        
+    except Exception as e:
+        logger.error(f"处理请求失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'处理请求失败: {str(e)}'}), 500
+
+
 def parse_page_range(pdf_path, pages_param):
     """
     解析页码参数
@@ -535,6 +721,191 @@ def convert_pdf_to_text(pdf_path, output_path, start_page=0, end_page=None):
     pdf_doc.close()
     doc_word.save(output_path)
     logger.info(f"纯文本转换完成: {end_page - start_page}页，每页PDF内容独立成页")
+
+
+@app.route('/pdf/to-images', methods=['POST'])
+def pdf_to_images():
+    """
+    PDF转图片 - 支持分页、多格式、自定义质量
+    
+    参数:
+    - file: PDF文件
+    - page: 当前页码（默认1）
+    - page_size: 每页返回图片数（默认6）
+    - format: 输出格式 png/jpg（默认png）
+    - quality: 图片质量 1-100（默认85）
+    - dpi: 分辨率 72-600（默认150）
+    
+    返回:
+    - images: 图片数组（base64编码）
+    - current_page: 当前页码
+    - total_pages: 总页数（分页）
+    - total_pdf_pages: PDF总页数
+    """
+    try:
+        # 验证文件
+        if 'file' not in request.files:
+            return jsonify({'error': '未上传文件'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': '文件名为空'}), 400
+        
+        # 获取参数
+        all_pages = request.form.get('all_pages', 'false').lower() == 'true'  # 是否转换所有页面
+        current_page = int(request.form.get('page', 1))
+        page_size = int(request.form.get('page_size', 6))
+        img_format = request.form.get('format', 'png').lower()
+        quality = int(request.form.get('quality', 85))
+        dpi = int(request.form.get('dpi', 150))
+        
+        # 参数验证
+        if current_page < 1:
+            current_page = 1
+        if page_size < 1 or page_size > 20:
+            page_size = 6
+        if img_format not in ['png', 'jpg', 'jpeg']:
+            img_format = 'png'
+        if quality < 1 or quality > 100:
+            quality = 85
+        if dpi < 72 or dpi > 600:
+            dpi = 150
+        
+        # 读取PDF
+        pdf_bytes = file.read()
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        total_pdf_pages = len(doc)
+        
+        # 如果请求转换所有页面，则转换全部
+        if all_pages:
+            logger.info(f"PDF转图片(全部): {file.filename}, 总页数={total_pdf_pages}, 格式={img_format}, DPI={dpi}")
+            start_index = 0
+            end_index = total_pdf_pages
+            total_pages = (total_pdf_pages + page_size - 1) // page_size  # 向上取整
+        else:
+            logger.info(f"PDF转图片: {file.filename}, 总页数={total_pdf_pages}, 请求页={current_page}, 格式={img_format}, DPI={dpi}")
+            # 计算分页
+            start_index = (current_page - 1) * page_size
+            end_index = min(start_index + page_size, total_pdf_pages)
+            total_pages = (total_pdf_pages + page_size - 1) // page_size  # 向上取整
+            
+            if start_index >= total_pdf_pages:
+                doc.close()
+                return jsonify({'error': '页码超出范围'}), 400
+        
+        # 高性能转换PDF页为图片 - 使用多线程并行处理
+        start_time = datetime.now()
+        
+        # 定义单页转换函数（用于多线程处理）
+        def convert_single_page(page_num, page_obj, zoom, mat, img_format, quality):
+            """转换单个PDF页面为图片"""
+            try:
+                page_start = datetime.now()
+                
+                # 高质量渲染：alpha=False提升性能，使用高质量抗锯齿
+                pix = page_obj.get_pixmap(
+                    matrix=mat, 
+                    alpha=False,
+                    colorspace=fitz.csRGB  # 明确指定RGB色彩空间
+                )
+                
+                # 性能优化：直接使用PyMuPDF输出，避免PIL转换
+                if img_format in ['jpg', 'jpeg']:
+                    # 直接输出JPEG（PyMuPDF原生支持，更快更高质量）
+                    img_bytes = pix.tobytes("jpeg", jpg_quality=quality)
+                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                else:
+                    # PNG格式：使用PIL优化压缩
+                    img_data = pix.tobytes("png")
+                    img = Image.open(io.BytesIO(img_data))
+                    
+                    # 高质量PNG压缩
+                    buffer = io.BytesIO()
+                    img.save(buffer, format='PNG', optimize=True, compress_level=6)
+                    img_bytes = buffer.getvalue()
+                    img_base64 = base64.b64encode(img_bytes).decode('utf-8')
+                
+                page_duration = (datetime.now() - page_start).total_seconds()
+                
+                result = {
+                    'page': page_num + 1,
+                    'image': f'data:image/{img_format};base64,{img_base64}',
+                    'width': pix.width,
+                    'height': pix.height,
+                    'size': len(img_bytes)
+                }
+                
+                logger.info(f"  页面 {page_num + 1}: {pix.width}x{pix.height}, {len(img_bytes)/1024:.1f}KB, 耗时{page_duration*1000:.0f}ms")
+                
+                return result
+            except Exception as e:
+                logger.error(f"转换页面 {page_num + 1} 失败: {str(e)}")
+                return None
+        
+        # 准备页面对象列表（每个线程需要独立的页面对象）
+        zoom = dpi / 72  # 计算缩放比例
+        mat = fitz.Matrix(zoom, zoom)
+        
+        # 计算线程数：根据页面数量动态调整，最多3个线程
+        num_pages = end_index - start_index
+        max_workers = min(3, num_pages, os.cpu_count() or 3)
+        
+        logger.info(f"使用 {max_workers} 个线程并行转换 {num_pages} 页")
+        
+        # 使用线程池并行处理
+        images = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            future_to_page = {}
+            for page_num in range(start_index, end_index):
+                page_obj = doc[page_num]  # 每个线程获取独立的页面对象
+                future = executor.submit(convert_single_page, page_num, page_obj, zoom, mat, img_format, quality)
+                future_to_page[future] = page_num
+            
+            # 收集结果（按页面顺序）
+            results = {}
+            completed = 0
+            for future in as_completed(future_to_page):
+                page_num = future_to_page[future]
+                try:
+                    result = future.result()
+                    if result:
+                        results[page_num] = result
+                        completed += 1
+                        if completed % 5 == 0 or completed == num_pages:
+                            logger.info(f"  进度: {completed}/{num_pages} 页已完成")
+                except Exception as e:
+                    logger.error(f"页面 {page_num + 1} 处理异常: {str(e)}")
+            
+            # 按页面顺序排序
+            images = [results[i] for i in range(start_index, end_index) if i in results]
+        
+        doc.close()
+        
+        total_duration = (datetime.now() - start_time).total_seconds()
+        total_size = sum(img['size'] for img in images) if images else 0
+        avg_time = total_duration / len(images) if images else 0
+        
+        logger.info(f"多线程并行转换完成: {len(images)}张图片, 总耗时={total_duration:.2f}s, 平均={avg_time*1000:.0f}ms/页, 总大小={total_size/1024:.1f}KB, 使用{max_workers}个线程")
+        
+        return jsonify({
+            'images': images,
+            'current_page': current_page if not all_pages else 1,
+            'total_pages': total_pages,
+            'total_pdf_pages': total_pdf_pages,
+            'page_size': page_size,
+            'start_page': start_index + 1,
+            'end_page': end_index,
+            'format': img_format,
+            'quality': quality,
+            'dpi': dpi,
+            'all_pages': all_pages  # 标识是否返回了所有页面
+        })
+        
+    except Exception as e:
+        logger.error(f"PDF转图片失败: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': f'转换失败: {str(e)}'}), 500
 
 
 @app.route('/download/<filename>', methods=['GET'])
@@ -3810,6 +4181,7 @@ if __name__ == '__main__':
     logger.info("========================================")
     logger.info("功能特性:")
     logger.info("  ✓ PDF转Word/Excel/PPT/图片")
+    logger.info("  ✓ PDF转图片 (分页、多格式、自定义质量)")
     logger.info("  ✓ Word/Excel/PPT转PDF")
     logger.info("  ✓ PDF压缩优化")
     logger.info("  ✓ PDF页面编排")
@@ -3826,6 +4198,7 @@ if __name__ == '__main__':
     logger.info("========================================")
     logger.info("API端点:")
     logger.info("  GET  /health - 健康检查")
+    logger.info("  POST /pdf/to-images - PDF转图片")
     logger.info("  POST /pdf/add-page-numbers - 添加页码")
     logger.info("  POST /pdf/preview-page-number - 预览页码")
     logger.info("  POST /pdf/crop - PDF页面裁剪")

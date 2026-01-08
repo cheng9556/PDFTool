@@ -125,9 +125,10 @@ Page({
       return;
     }
     // 将相对 URL 转换为完整 URL（兼容旧记录）
+    const config = require('../../utils/config');
     let downloadUrl = rec.url;
     if (downloadUrl && !downloadUrl.startsWith('http')) {
-      downloadUrl = 'http://localhost:8789' + downloadUrl;
+      downloadUrl = config.pythonServer + downloadUrl;
     }
     console.log('开始下载:', downloadUrl);
     wx.showLoading({ title: '下载中...', mask: true });

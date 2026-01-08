@@ -1,33 +1,61 @@
-# 临时文件和输出目录
-server-python/converted/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Flask
+instance/
+.webassets-cache
+
+# 上传文件目录
 server-python/uploads/
-server-python/temp/
-server-python/test*.pdf
-server-python/test*.txt
-server-python/test*.py
-server-python/*.ps1
-
-# 测试输出
-test-output/
-test-results/
-
-# 原型文件中的临时图片
-原型/截图/
+*.pdf
+*.png
+*.jpg
+*.jpeg
 
 # 日志文件
 *.log
 
-# IDE配置
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# 操作系统文件
-.DS_Store
-Thumbs.db
+# 微信小程序
+pdf-to-png-converter/miniprogram/node_modules/
+pdf-to-png-converter/miniprogram/.tea/
 
-# 其他临时文件
-simple-*.txt
-simple-*.py
+# 临时文件
+*.tmp
+*.bak
+*.swp
 
+# 环境变量
+.env
+.env.local
+
+# 证书和密钥
+*.pem
+*.key
+*.crt
+*.cert
+
+# 备份文件
+*.backup
+*.old

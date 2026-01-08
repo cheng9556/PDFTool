@@ -21,6 +21,10 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.ArrayList;
 
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.text.PDFTextStripper;
+
 @Service
 @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(
     name = "jodconverter.enabled", 
@@ -55,7 +59,56 @@ public class ConversionService {
                     .as(DefaultDocumentFormatRegistry.PDF)   // 输出格式：PDF
                     .execute();
 
-            return outputStream.toByteArray();
+            byte[] pdfBytes = outputStream.toByteArray();
+            
+            // 移除空白页
+            pdfBytes = removeBlankPages(pdfBytes);
+            
+            return pdfBytes;
+        }
+    }
+    
+    /**
+     * 移除PDF中的空白页
+     * 空白页定义：文本内容少于10个字符
+     */
+    private byte[] removeBlankPages(byte[] pdfBytes) {
+        try (PDDocument doc = PDDocument.load(pdfBytes)) {
+            int originalPageCount = doc.getNumberOfPages();
+            List<Integer> blankPageIndexes = new ArrayList<>();
+            
+            PDFTextStripper stripper = new PDFTextStripper();
+            
+            // 检测空白页
+            for (int i = 0; i < doc.getNumberOfPages(); i++) {
+                stripper.setStartPage(i + 1);
+                stripper.setEndPage(i + 1);
+                String text = stripper.getText(doc).trim();
+                
+                if (text.length() < 10) {
+                    blankPageIndexes.add(i);
+                }
+            }
+            
+            if (blankPageIndexes.isEmpty()) {
+                return pdfBytes; // 没有空白页，返回原始PDF
+            }
+            
+            // 从后往前删除空白页（避免索引偏移问题）
+            for (int i = blankPageIndexes.size() - 1; i >= 0; i--) {
+                doc.removePage(blankPageIndexes.get(i));
+            }
+            
+            System.out.println("[Excel转PDF] 移除了 " + blankPageIndexes.size() + 
+                             " 个空白页 (原" + originalPageCount + "页 -> " + doc.getNumberOfPages() + "页)");
+            
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            doc.save(output);
+            return output.toByteArray();
+            
+        } catch (Exception e) {
+            System.err.println("[Excel转PDF] 移除空白页失败: " + e.getMessage());
+            return pdfBytes; // 失败时返回原始PDF
         }
     }
 

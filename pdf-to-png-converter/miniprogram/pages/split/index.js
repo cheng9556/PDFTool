@@ -1,5 +1,7 @@
 // PDF文件拆分页面
-const serverUrl = 'http://localhost:8789';
+// 使用全局配置
+const config = require('../../utils/config');
+const serverUrl = config.pythonServer;
 
 Page({
   data: {

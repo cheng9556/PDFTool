@@ -125,8 +125,8 @@ public class WordToPdfOptimizationFilter implements Filter {
             
             // ============ 高级选项 ============
             
-            // 保留原始页面布局
-            createPropertyValue("IsSkipEmptyPages", false),
+            // 跳过空白页（解决 Excel 转 PDF 空白页问题）
+            createPropertyValue("IsSkipEmptyPages", true),
             
             // 导出隐藏幻灯片（Word中可能有隐藏内容）
             createPropertyValue("ExportHiddenSlides", true),
