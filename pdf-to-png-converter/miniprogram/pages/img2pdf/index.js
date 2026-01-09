@@ -7,6 +7,7 @@ Page({
     images: []
   },
 
+  // 选择图片
   chooseImages() {
     wx.chooseImage({
       count: 9,
@@ -24,6 +25,27 @@ Page({
           this.setData({ images: list.slice(0, 35) });
         } else {
           this.setData({ images: list });
+        }
+      }
+    });
+  },
+
+  // 移除单张图片
+  removeImage(e) {
+    const index = e.currentTarget.dataset.index;
+    const images = this.data.images;
+    images.splice(index, 1);
+    this.setData({ images });
+  },
+
+  // 清空所有图片，重新选择
+  clearImages() {
+    wx.showModal({
+      title: '提示',
+      content: '确定要清空所有已选图片吗？',
+      success: (res) => {
+        if (res.confirm) {
+          this.setData({ images: [] });
         }
       }
     });

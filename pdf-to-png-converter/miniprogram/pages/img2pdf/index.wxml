@@ -5,15 +5,29 @@
       <view>• 可选取图片，合成一个PDF文件</view>
       <view>• 合成页数35页以内，页面总大小70MB以内</view>
       <view>• 从相册选取图片时一次可选取9张，可多次选择</view>
+      <view>• 点击图片右上角 × 可移除单张图片</view>
     </view>
 
-    <view class="uploader" bindtap="chooseImages">
-      <text>＋</text>
+    <!-- 操作按钮区域 -->
+    <view class="action-buttons">
+      <view class="uploader" bindtap="chooseImages">
+        <text>＋</text>
+        <text class="uploader-text">选择图片</text>
+      </view>
+      <view class="clear-btn" bindtap="clearImages" wx:if="{{images.length}}">
+        <text>↻</text>
+        <text class="clear-text">重新选择</text>
+      </view>
     </view>
 
+    <!-- 图片预览区域 -->
     <view class="thumbs" wx:if="{{images.length}}">
       <block wx:for="{{images}}" wx:key="index">
-        <image class="thumb" mode="aspectFill" src="{{item}}" />
+        <view class="thumb-wrapper">
+          <image class="thumb" mode="aspectFill" src="{{item}}" />
+          <view class="remove-btn" data-index="{{index}}" bindtap="removeImage">×</view>
+          <view class="thumb-index">{{index + 1}}</view>
+        </view>
       </block>
     </view>
   </view>
